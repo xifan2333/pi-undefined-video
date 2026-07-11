@@ -107,7 +107,18 @@ asrDir:   20260709/.uvid-cache/asr
 output:   20260709/.uvid-cache/draft-survey
 ```
 
-读 `summary.json`、`survey-NN.json` 的 entries；video 打开 `contact-sheet-*-survey-original.png`（句末/+0.5/+1/+2s）。
+输出布局：根目录只有汇总；每个 source 的证据在子目录里。
+
+```text
+20260709/.uvid-cache/draft-survey/
+├── summary.json
+└── NN/
+    ├── survey-NN.json
+    ├── contact-sheet-NN-survey-original.png
+    └── contact-sheet-NN-survey-small.png
+```
+
+读 `summary.json`、`NN/survey-NN.json` 的 entries；video 打开 `NN/contact-sheet-NN-survey-original.png`（句末/+0.5/+1/+2s）。
 
 ### init
 
