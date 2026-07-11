@@ -7,33 +7,36 @@ Install as a [pi package](https://pi.dev) (loads extensions + skills), or use th
 ## Install
 
 ```bash
-# from GitHub (recommended)
-pi install git:github.com/xifan2333/pi-undefined-video
+# npm (recommended)
+pi install npm:pi-undefined-video
 
 # project-scoped
-pi install git:github.com/xifan2333/pi-undefined-video -l
+pi install npm:pi-undefined-video -l
+
+# GitHub
+pi install git:github.com/xifan2333/pi-undefined-video
 
 # local path (development)
 pi install /path/to/pi-undefined-video
+```
+
+Also install the CLI globally if you want `uvid` on PATH:
+
+```bash
+npm install -g pi-undefined-video
 ```
 
 Open a new pi session after install so tools/skills reload.
 
 ## CLI
 
-Requires a runtime that can run TypeScript entrypoints (e.g. pi's node setup, or `tsx`/`node --experimental-strip-types` depending on your environment):
-
-```bash
-node src/cli.ts flow
-node src/cli.ts prep normalize -i ep/raw/01.mp4 -o ep/clips/01.mp4 --lufs -16 --tp -1.5 --lra 11
-```
-
-If the package bin is linked:
-
 ```bash
 uvid flow
 uvid <stage> <action> --help
+uvid prep normalize -i ep/raw/01.mp4 -o ep/clips/01.mp4 --lufs -16 --tp -1.5 --lra 11
 ```
+
+The published bin runs TypeScript via `tsx` (bundled dependency).
 
 ## Package layout
 
@@ -64,4 +67,4 @@ Listed in `package.json` (`@earendil-works/pi-*`, `typebox`). Pi supplies these 
 
 ## License
 
-Private / unpublished npm package for now (`"private": true`). Source on GitHub for install via git path.
+MIT

@@ -1,9 +1,10 @@
 {
   "name": "pi-undefined-video",
   "version": "0.2.0",
-  "private": true,
+  "private": false,
   "type": "module",
   "description": "Episode video production toolchain for pi (prep / draft / finish / deliver)",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/xifan2333/pi-undefined-video.git"
@@ -13,20 +14,48 @@
   },
   "homepage": "https://github.com/xifan2333/pi-undefined-video#readme",
   "bin": {
-    "uvid": "./src/cli.ts"
+    "uvid": "./bin/uvid.mjs"
   },
-  "keywords": ["pi-package", "video", "uvid"],
+  "files": [
+    "assets",
+    "bin",
+    "extensions",
+    "schemas",
+    "skills",
+    "src",
+    "templates",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "pi-package",
+    "video",
+    "uvid",
+    "timeline",
+    "subtitle"
+  ],
   "pi": {
     "extensions": ["./extensions"],
     "skills": ["./skills"]
   },
   "dependencies": {
     "markdown-it": "^14.1.0",
-    "shiki": "^3.7.0"
+    "shiki": "^3.7.0",
+    "tsx": "^4.19.0",
+    "typebox": "^1.0.0"
   },
   "peerDependencies": {
     "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-coding-agent": "*",
-    "typebox": "*"
+    "@earendil-works/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@earendil-works/pi-ai": {
+      "optional": true
+    },
+    "@earendil-works/pi-coding-agent": {
+      "optional": true
+    }
   }
 }
