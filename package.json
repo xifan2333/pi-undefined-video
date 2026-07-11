@@ -1,6 +1,6 @@
 {
   "name": "pi-undefined-video",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": false,
   "type": "module",
   "description": "Episode video production toolchain for pi (prep / draft / finish / deliver)",
@@ -37,8 +37,12 @@
     "subtitle"
   ],
   "pi": {
-    "extensions": ["./extensions"],
-    "skills": ["./skills"]
+    "extensions": [
+      "./extensions"
+    ],
+    "skills": [
+      "./skills"
+    ]
   },
   "dependencies": {
     "markdown-it": "^14.1.0",
