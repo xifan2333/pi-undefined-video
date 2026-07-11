@@ -1,0 +1,431 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://undefined-project.local/schemas/draft.schema.json",
+  "title": "Undefined Project draft.json",
+  "description": "The single editing decision file for an episode. ASR text/startMs/endMs/words are preserved; semantic edits (correctedText, word cut/replace, gapAfter) and waveform-validated source ranges live in one file. No separate edit-plan.json. Canonical schema ships with the package under schemas/.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "timebase",
+    "sources",
+    "entries"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "episode": {
+      "type": "string",
+      "description": "Episode directory name, for example 20260709."
+    },
+    "timebase": {
+      "type": "string",
+      "enum": [
+        "source",
+        "timeline"
+      ],
+      "description": "source means entry times are relative to each source file; timeline means entry times are already laid out on the final timeline."
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "entries": {
+      "type": "array",
+      "description": "Transcript entries. Each entry keeps the original ASR JSON shape and adds optional ids/source/correctedText/edit fields.",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "required": [
+        "id",
+        "path",
+        "asr",
+        "kind"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable short id used by entries, for example 01 or cam-a."
+        },
+        "path": {
+          "type": "string",
+          "description": "Media path relative to the episode directory."
+        },
+        "asr": {
+          "type": "string",
+          "description": "Raw ASR JSON path relative to the episode directory."
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "video",
+            "audio"
+          ],
+          "description": "How script.md consumes this source, not the container format: <video> = video (picture must be cut in sync with ranges); <audio> = audio (audio track only, visuals come from rendered scenes). An mp4 referenced via <audio src> is kind=audio."
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "voice",
+            "screen-recording",
+            "b-roll",
+            "other"
+          ],
+          "description": "Optional semantic role for editing/export."
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Total duration of the source media in ms (from ffprobe)."
+        },
+        "ranges": {
+          "type": "array",
+          "description": "Waveform-validated keep intervals (source time, ms). Produced by LLM combining ASR semantic decisions and waveform analysis. Range boundaries may carry LLM-declared in/out smoothing intent.",
+          "items": {
+            "$ref": "#/$defs/range"
+          }
+        },
+        "subtitles": {
+          "type": "array",
+          "description": "Corrected subtitles with source-local time (after range compression). Derived from entries.",
+          "items": {
+            "$ref": "#/$defs/sourceSubtitle"
+          }
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "required": [
+        "id",
+        "source",
+        "text",
+        "startMs",
+        "endMs",
+        "words"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable entry id, for example 03.s003."
+        },
+        "source": {
+          "type": "string",
+          "description": "Source id from top-level sources."
+        },
+        "text": {
+          "type": "string",
+          "description": "Original ASR transcript text. Preserve this unless regenerating ASR."
+        },
+        "correctedText": {
+          "type": "string",
+          "description": "Human-corrected subtitle text. If absent, use text after word edits."
+        },
+        "startMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "endMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "edit": {
+          "$ref": "#/$defs/edit"
+        },
+        "words": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/word"
+          }
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "word": {
+      "type": "object",
+      "required": [
+        "text",
+        "startMs",
+        "endMs"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable word id, for example 03.s003.w005."
+        },
+        "text": {
+          "type": "string"
+        },
+        "startMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "endMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "edit": {
+          "$ref": "#/$defs/wordEdit"
+        },
+        "gapAfter": {
+          "$ref": "#/$defs/gapAfter"
+        }
+      }
+    },
+    "edit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "keep",
+            "cut",
+            "mute",
+            "review"
+          ],
+          "default": "keep"
+        },
+        "reason": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "wordEdit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": [
+            "keep",
+            "cut",
+            "replace",
+            "review"
+          ],
+          "default": "keep"
+        },
+        "text": {
+          "type": "string",
+          "description": "Replacement text when action is replace."
+        },
+        "reason": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "gapAfter": {
+      "type": "object",
+      "required": [
+        "endMs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "endMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Start time of the next word/entry, i.e. the end of this silence gap."
+        },
+        "edit": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": [
+                "keep",
+                "cut",
+                "trim",
+                "review"
+              ],
+              "default": "keep"
+            },
+            "keepMs": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "For trim: silence duration to keep."
+            },
+            "reason": {
+              "type": "string"
+            },
+            "notes": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "range": {
+      "type": "object",
+      "required": [
+        "id",
+        "sourceStartMs",
+        "sourceEndMs",
+        "durationMs",
+        "sourceLocalStartMs",
+        "sourceLocalEndMs"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Range id, e.g. r001."
+        },
+        "sourceStartMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Start time in source media (ms)."
+        },
+        "sourceEndMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "End time in source media (ms)."
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sourceLocalStartMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Compressed local start time (skipping cut intervals)."
+        },
+        "sourceLocalEndMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Compressed local end time."
+        },
+        "in": {
+          "$ref": "#/$defs/rangeBoundary",
+          "description": "LLM-declared handling for the range in-point."
+        },
+        "out": {
+          "$ref": "#/$defs/rangeBoundary",
+          "description": "LLM-declared handling for the range out-point."
+        },
+        "review": {
+          "type": "boolean",
+          "description": "True only when LLM explicitly wants human review; difficult cuts should otherwise carry smoothing metadata."
+        },
+        "notes": {
+          "type": "string"
+        }
+      }
+    },
+    "rangeBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "snap": {
+          "type": "string",
+          "enum": [
+            "silence_midpoint",
+            "zero_crossing",
+            "local_min",
+            "falling_tail",
+            "manual"
+          ],
+          "description": "Why this boundary was placed at this source time."
+        },
+        "reason": {
+          "type": "string",
+          "description": "Short LLM explanation or label for the boundary choice."
+        },
+        "smoothing": {
+          "$ref": "#/$defs/boundarySmoothing"
+        }
+      }
+    },
+    "boundarySmoothing": {
+      "type": "object",
+      "required": [
+        "type",
+        "ms"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "none",
+            "fade",
+            "crossfade",
+            "breath_gap",
+            "manual_review"
+          ]
+        },
+        "ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100
+        }
+      }
+    },
+    "sourceSubtitle": {
+      "type": "object",
+      "required": [
+        "id",
+        "source",
+        "text",
+        "sourceLocalStartMs",
+        "sourceLocalEndMs"
+      ],
+      "additionalProperties": true,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Corresponding entry id."
+        },
+        "source": {
+          "type": "string",
+          "description": "Source id."
+        },
+        "text": {
+          "type": "string",
+          "description": "Final corrected subtitle text."
+        },
+        "sourceLocalStartMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "sourceLocalEndMs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "originalStartMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Original ASR startMs (debug)."
+        },
+        "originalEndMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Original ASR endMs (debug)."
+        }
+      }
+    }
+  }
+}

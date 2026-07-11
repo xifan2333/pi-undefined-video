@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="assets/themes.css" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1280px; height: 720px; overflow: hidden; background: #1e2326; }
+      #root { position: relative; width: 1280px; height: 720px; background: var(--bg); }
+      #menu {
+        position: absolute; left: 260px; top: 100px; width: 760px;
+        border: 4px solid var(--muted);
+        background: color-mix(in srgb, var(--fg) 6%, var(--bg));
+        padding: 36px 40px;
+      }
+      #mtitle {
+        font-family: var(--font-display), monospace;
+        font-size: 34px; color: var(--keyword); margin-bottom: 26px;
+      }
+      #mtitle::before { content: "» "; }
+      #rows { position: relative; }
+      #cursor {
+        position: absolute; left: -40px; width: 760px; height: 72px;
+        background: var(--keyword); z-index: 0; opacity: 0;
+      }
+      .row {
+        position: relative; z-index: 1; height: 72px; display: flex;
+        align-items: center; gap: 24px;
+        font-family: var(--font-display), monospace;
+      }
+      .row .num {
+        min-width: 56px; height: 44px; line-height: 44px; text-align: center;
+        font-size: 26px; color: var(--bg); background: var(--muted);
+      }
+      .row.cur .num { background: var(--keyword); }
+      .row .ttl { font-size: 40px; color: var(--fg); flex: 1; }
+      .row.done { opacity: .45; }
+      .row.on .num { background: var(--bg); color: var(--keyword); }
+      .row.on .ttl { color: var(--bg); }
+      .watermark {
+        position: absolute; right: 32px; bottom: 24px; z-index: 20;
+        font-family: var(--font-display), monospace;
+        font-size: 28px; color: var(--muted); opacity: .55; pointer-events: none;
+      }
+      .watermark .at { color: var(--keyword); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-theme="__THEME__"
+         data-composition-id="__COMP_ID__"
+         data-start="0" data-duration="__DURATION__"
+         data-width="1280" data-height="720" data-fps="25">
+      <div id="menu"><div id="mtitle">章节</div><div id="rows"><div id="cursor"></div></div></div>
+      <div class="watermark"><span class="at">@</span> 未定义项目</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      const C = __CHAPTERS_JSON__, CUR = __CURRENT__, PREV = __PREVIOUS__, RH = 72;
+      const rowsEl = document.getElementById("rows"), cursor = document.getElementById("cursor");
+      const rows = C.map((name, i) => {
+        const r = document.createElement("div");
+        r.className = "row" + (i < CUR ? " done" : "") + (i === CUR ? " cur" : "");
+        r.innerHTML = '<span class="num">' + String(i + 1).padStart(2, '0') + '</span><span class="ttl">' + name + '</span>';
+        rowsEl.appendChild(r);
+        return r;
+      });
+      const clamp01 = v => Math.max(0, Math.min(1, v));
+      const easeOut = v => 1 - Math.pow(1 - clamp01(v), 3);
+      const START_AT = .55, MOVE_AT = 1.05, MOVE_DUR = .42, CONFIRM_AT = 1.55, FADE_AT = 2.62;
+      function cursorPos(t) {
+        if (t < MOVE_AT) return PREV;
+        if (CUR === PREV) return CUR;
+        const p = easeOut((t - MOVE_AT) / MOVE_DUR);
+        // 选关菜单感：位置连续移动，但按 RH 像素落在整数行高度上。
+        return PREV + (CUR - PREV) * p;
+      }
+      function activeIndex(t) {
+        if (t < MOVE_AT) return PREV;
+        if (t >= MOVE_AT + MOVE_DUR) return CUR;
+        return Math.round(cursorPos(t));
+      }
+      function render() {
+        const t = tl.time(), menuIn = clamp01(t / .2);
+        let alpha = t > FADE_AT ? clamp01(1 - (t - FADE_AT) / .38) : 1;
+        alpha *= clamp01(t / .15);
+        const menu = document.getElementById("menu");
+        menu.style.opacity = alpha;
+        menu.style.transform = "scale(" + (.9 + .1 * menuIn) + ")";
+        rows.forEach((r, i) => {
+          const appear = clamp01((t - (.2 + i * .07)) / .1);
+          const dim = i < CUR ? .45 : 1;
+          r.style.opacity = String(dim * appear * alpha);
+          r.style.transform = "translateX(" + (-18 * (1 - appear)) + "px)";
+        });
+        const show = t > START_AT;
+        let cOp = show ? 1 : 0;
+        // 落点确认：到达当前章节后闪烁两下，像游戏选关确认。
+        if (t >= CONFIRM_AT && t < CONFIRM_AT + .55) cOp = (Math.floor((t - CONFIRM_AT) / .09) % 2 === 0) ? 1 : .25;
+        const pos = Math.round(cursorPos(t) * RH);
+        cursor.style.opacity = String(cOp * alpha);
+        cursor.style.transform = "translateY(" + pos + "px)";
+        const ai = activeIndex(t);
+        rows.forEach((r, i) => r.classList.toggle("on", show && i === ai && cOp > .45));
+      }
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      tl.eventCallback("onUpdate", render);
+      tl.to({}, { duration: __DURATION__ }, 0);
+      render();
+      window.__timelines["__COMP_ID__"] = tl;
+    </script>
+  </body>
+</html>

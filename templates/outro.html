@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="assets/themes.css" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1280px; height: 720px; overflow: hidden; background: #1e2326; }
+      #root { position: relative; width: 1280px; height: 720px; background: var(--bg); }
+      #stage { position: absolute; inset: 0; }
+
+      #title {
+        position: absolute; top: 360px; left: 0;
+        font-family: var(--font-display), monospace;
+        font-size: 88px; line-height: 1;
+      }
+      .glyph { position: absolute; top: 0; color: var(--fg); transition: color 0.06s steps(1); }
+      .glyph.hi { color: var(--keyword); }
+
+      #logo {
+        position: absolute;
+        left: 0; right: 0; top: 154px;
+        margin: 0 auto;
+        width: 148px; height: 148px;
+        border-radius: 50%;
+        image-rendering: pixelated;
+        opacity: 0;
+        transform: scale(0.3);
+      }
+
+    </style>
+  </head>
+  <body>
+    <div id="root" data-theme="everforest"
+         data-composition-id="outro"
+         data-start="0" data-duration="2.28"
+         data-width="1280" data-height="720" data-fps="25">
+
+      <div id="stage">
+        <img id="logo" src="assets/avator.png" />
+        <div id="title">
+          <span class="glyph" style="left:400px">谢</span>
+          <span class="glyph" style="left:525px">谢</span>
+          <span class="glyph" style="left:650px">观</span>
+          <span class="glyph" style="left:775px">看</span>
+        </div>
+      </div>
+
+      <audio id="sfx" data-start="0" data-duration="2.28" data-track-index="9" src="assets/outro.mp3"></audio>
+    </div>
+
+    <script>
+      // —— 音频打点：一字一拍变色
+      // 时长对齐 25fps 整帧：2.28s = 57 帧。淡出在末尾前收完，并 hold 全透明几帧，
+      // 避免 hyperframes 最后一帧采不到 duration 端点导致“没完全淡出”。
+      const DURATION = 2.28;
+      const FADE_START = 1.84;
+      const FADE_END = 2.16; // 最后 3 帧 (2.16/2.20/2.24) stage 全透明
+      const BEATS = [0.02, 0.21, 0.45, 0.64, 0.88, 1.06, 1.46, 1.66, 1.82, 2.02];
+      const glyphs = document.querySelectorAll(".glyph");
+      const logo = document.getElementById("logo");
+      const title = document.getElementById("title");
+      const stage = document.getElementById("stage");
+
+      function render() {
+        const t = tl.time();
+        // 标题淡入
+        title.style.opacity = Math.min(1, t / 0.18);
+
+        // 逐字点亮（随拍子变色）
+        // 拍 2(0.21)=谢₁, 拍 3(0.45)=谢₂, 拍 4(0.64)=观, 拍 5(0.88)=看
+        const HIT = [0.21, 0.45, 0.64, 0.88];
+        glyphs.forEach((g, i) => {
+          g.classList.toggle("hi", t >= HIT[i]);
+        });
+
+        // Logo：4 个字全亮后弹入（1.06 之后）
+        const logoStart = 1.08;
+        if (t < logoStart) {
+          logo.style.opacity = "0";
+          logo.style.transform = "scale(0.3)";
+        } else {
+          const k = Math.min(1, (t - logoStart) / 0.25);
+          // steps 弹跳
+          const sk = Math.round(k * 5) / 5;
+          logo.style.opacity = sk > 0 ? 1 : 0;
+          logo.style.transform = "scale(" + (0.3 + 0.7 * sk) + ")";
+        }
+
+        // 全局淡出（淡出 stage，留 root 暗底）；末尾 hold 全透明
+        if (t >= FADE_END) {
+          stage.style.opacity = "0";
+        } else if (t > FADE_START) {
+          const f = (t - FADE_START) / (FADE_END - FADE_START);
+          stage.style.opacity = String(1 - f);
+        } else {
+          stage.style.opacity = "1";
+        }
+      }
+
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      tl.eventCallback("onUpdate", render);
+      tl.to({}, { duration: DURATION }, 0);
+      render();
+      window.__timelines["outro"] = tl;
+    </script>
+  </body>
+</html>

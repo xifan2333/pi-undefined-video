@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <link rel="stylesheet" href="assets/themes.css" />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1280px; height: 720px; overflow: hidden; }
+      #root { position: relative; width: 1280px; height: 720px; background: var(--bg); }
+
+      #pac {
+        position: absolute; top: 324px; left: 0;
+        width: 72px; height: 72px;
+        image-rendering: pixelated;
+        opacity: 0;
+      }
+      #title {
+        position: absolute; top: 316px; left: 0;
+        font-family: var(--font-display), monospace;
+        font-size: 88px; line-height: 1;
+      }
+      .glyph { position: absolute; top: 0; color: var(--fg); }
+      .glyph.at { color: var(--keyword); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-theme="everforest"
+         data-composition-id="intro"
+         data-start="0" data-duration="4.28"
+         data-width="1280" data-height="720" data-fps="25">
+
+      <div id="title"></div>
+      <canvas id="pac" width="24" height="24"></canvas>
+
+      <!-- 音频延后 LEAD 秒开始 -->
+      <audio id="sfx" data-start="0.70" data-duration="3.58" data-track-index="9" src="assets/intro.mp3"></audio>
+    </div>
+
+    <script>
+      const LEAD = 0.70;   // 开头标题静置时间；音频+动画之后再开始
+      const root = document.getElementById("root");
+      const css = (n) => getComputedStyle(root).getPropertyValue(n).trim();
+      const clamp01 = v => Math.max(0, Math.min(1, v));
+
+      // —— 布局：@ + 未定义项目 ——
+      const CHARS = ["@", "未", "定", "义", "项", "目"];
+      const START = 372, STEP = 92;
+      const titleEl = document.getElementById("title");
+      const glyphs = CHARS.map((ch, i) => {
+        const s = document.createElement("span");
+        s.className = "glyph" + (ch === "@" ? " at" : "");
+        s.textContent = ch;
+        s.style.left = (START + i * STEP) + "px";
+        titleEl.appendChild(s);
+        return s;
+      });
+
+      // —— 音频打点（音频时间，0 起）：5 个字一字一音 ——
+      const EAT = [0.45, 0.88, 1.30, 1.73, 2.02];       // 未 定 义 项 目
+      const KF = [[0.0,372],[0.30,372],[0.45,452],[0.88,544],[1.30,636],[1.73,728],[2.02,820],[2.45,905]];
+      function lerpX(t){
+        if (t<=KF[0][0]) return KF[0][1];
+        for (let i=1;i<KF.length;i++){ if (t<=KF[i][0]){ const[t0,x0]=KF[i-1],[t1,x1]=KF[i]; return x0+(x1-x0)*(t-t0)/(t1-t0);} }
+        return KF[KF.length-1][1];
+      }
+      function mouthAt(t){
+        let d=9; for(const n of EAT) d=Math.min(d, Math.abs(t-n));
+        return Math.min(1, d/0.17);   // 0=闭嘴(咬), 1=张嘴
+      }
+
+      // —— 吃豆人（canvas 画）——
+      const pac = document.getElementById("pac");
+      const ctx = pac.getContext("2d");
+      const S = 24;
+      function drawPac(mouth){
+        ctx.clearRect(0,0,S,S);
+        ctx.fillStyle = css("--warn");
+        const r=S/2, a=mouth*0.30*Math.PI;
+        ctx.beginPath(); ctx.moveTo(r,r);
+        ctx.arc(r,r,r,a,Math.PI*2-a); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = css("--bg");
+        ctx.fillRect(Math.round(r-2), Math.round(r-r*0.55), 2, 2);
+      }
+
+      function render(){
+        const tt = tl.time() - LEAD;   // 动画/音频时间（延后开始）
+        // @ 快速变成吃豆人（动画开始后）
+        glyphs[0].style.opacity = tt < 0.30 ? "1" : String(clamp01(1-(tt-0.30)/0.12));
+        let pop = 1;
+        if (tt < 0.40) pop = clamp01((tt-0.28)/0.12);     // 变身淡入（tt<0.28 时为 0，隐藏）
+        if (tt > 2.15) pop = clamp01(1-(tt-2.15)/0.45);   // 吃完淡出
+        pac.style.opacity = pop;
+        pac.style.transform = "translateX(" + lerpX(tt) + "px)";
+        drawPac(mouthAt(tt));
+        // 逐字吃掉 未定义项目
+        for (let i=1;i<glyphs.length;i++) glyphs[i].style.opacity = tt >= EAT[i-1] ? "0" : "1";
+      }
+
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      tl.eventCallback("onUpdate", render);
+      tl.fromTo("#title", { opacity:0, y:8 }, { opacity:1, y:0, duration:0.28, ease:"steps(4)" }, 0);
+      tl.to({}, { duration: 4.28 }, 0);   // 撑满时长供逐帧 seek
+
+      render();
+      window.__timelines["intro"] = tl;
+    </script>
+  </body>
+</html>

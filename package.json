@@ -1,0 +1,32 @@
+{
+  "name": "pi-undefined-video",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "Episode video production toolchain for pi (prep / draft / finish / deliver)",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xifan2333/pi-undefined-video.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xifan2333/pi-undefined-video/issues"
+  },
+  "homepage": "https://github.com/xifan2333/pi-undefined-video#readme",
+  "bin": {
+    "uvid": "./src/cli.ts"
+  },
+  "keywords": ["pi-package", "video", "uvid"],
+  "pi": {
+    "extensions": ["./extensions"],
+    "skills": ["./skills"]
+  },
+  "dependencies": {
+    "markdown-it": "^14.1.0",
+    "shiki": "^3.7.0"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": "*",
+    "@earendil-works/pi-coding-agent": "*",
+    "typebox": "*"
+  }
+}

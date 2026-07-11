@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<script src="assets/speaker-sprite-data.js"></script>
+<link rel="stylesheet" href="assets/themes.css" />
+<link rel="stylesheet" href="assets/components.css" />
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1280px;height:720px;overflow:hidden;background:transparent}
+#root{position:relative;width:1280px;height:720px;background:transparent}
+#stage{position:absolute;inset:0;width:1280px;height:720px}
+</style>
+</head>
+<body>
+<div id="root" data-theme="everforest" data-composition-id="rpg-dialog" data-start="0" data-duration="0.16" data-width="1280" data-height="720" data-fps="25">
+  <canvas id="stage" width="1280" height="720"></canvas>
+</div>
+<script>
+const root = document.getElementById('root');
+const canvas = document.getElementById('stage');
+const ctx = canvas.getContext('2d');
+
+function cssVar(name){ return getComputedStyle(root).getPropertyValue(name).trim(); }
+function rgba(hex, a){
+  const h = String(hex || '#000000').replace('#','');
+  const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function px(x,y,w,h,c){ ctx.fillStyle=c; ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h)); }
+function strokePixelRect(x,y,w,h,s,c){
+  px(x+s,y,w-s*2,s,c); px(x+s,y+h-s,w-s*2,s,c);
+  px(x,y+s,s,h-s*2,c); px(x+w-s,y+s,s,h-s*2,c);
+  px(x+s,y+s,s,s,c); px(x+w-s*2,y+s,s,s,c);
+  px(x+s,y+h-s*2,s,s,c); px(x+w-s*2,y+h-s*2,s,s,c);
+}
+function drawDialogBox(x,y,w,h,bg,fg,kw){
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+  px(x+8,y,w-16,h,rgba(bg,0.88));
+  px(x,y+8,w,h-16,rgba(bg,0.88));
+  strokePixelRect(x,y,w,h,6,kw);
+  strokePixelRect(x+10,y+10,w-20,h-20,3,rgba(fg,0.55));
+  ctx.restore();
+}
+function drawRows(rows,x,y,scale,offsetX=0,offsetY=0){
+  const pal = window.SPEAKER_SPRITES.palette;
+  for(let yy=0; yy<rows.length; yy++){
+    const row = rows[yy];
+    for(const run of row){
+      const [xx,len,ci] = run;
+      ctx.fillStyle = pal[ci];
+      ctx.fillRect(
+        Math.round(x + (offsetX + xx) * scale),
+        Math.round(y + (offsetY + yy) * scale),
+        Math.ceil(len * scale),
+        Math.ceil(scale)
+      );
+    }
+  }
+}
+function drawSpeaker(x,y,scale,mouthOpen){
+  const data = window.SPEAKER_SPRITES;
+  ctx.save();
+  ctx.imageSmoothingEnabled=false;
+  drawRows(data.base, x, y, scale, 0, 0);
+  const m = data.mouth;
+  drawRows(mouthOpen ? data.mouthOpened : data.mouthClosed, x, y, scale, m.x, m.y);
+  ctx.restore();
+}
+function render(){
+  const t = tl.time();
+  const bg = cssVar('--bg') || '#272e33';
+  const fg = cssVar('--fg') || '#d3c6aa';
+  const kw = cssVar('--keyword') || '#83c092';
+  ctx.clearRect(0,0,1280,720);
+  ctx.imageSmoothingEnabled=false;
+
+  const mouthOpen = Math.floor(t * 25) % 2 === 0;
+  drawSpeaker(58, 514, 1.72, mouthOpen);
+  drawDialogBox(285, 552, 780, 95, bg, fg, kw);
+  // RPG 等待指示器 ▼，按 2Hz 闪烁
+  if (t < 0.08) {
+    const ax = 1012, ay = 620, u = 5;
+    px(ax, ay, u*5, u, kw);
+    px(ax+u, ay+u, u*3, u, kw);
+    px(ax+u*2, ay+u*2, u, u, kw);
+  }
+}
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({paused:true});
+tl.to({}, {duration:0.16}, 0);
+tl.eventCallback('onUpdate', render);
+render();
+window.__timelines['rpg-dialog'] = tl;
+</script>
+</body>
+</html>
