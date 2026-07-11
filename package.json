@@ -1,6 +1,6 @@
 {
   "name": "pi-undefined-video",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": false,
   "type": "module",
   "description": "Episode video production toolchain for pi (prep / draft / finish / deliver)",

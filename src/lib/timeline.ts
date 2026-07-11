@@ -472,46 +472,138 @@ export async function timelineCreateMain(p: TimelineMainParams, ctx: Ctx): Promi
   const dialogClips: any[] = [];
   const subtitles: any[] = [];
   if (hasAllDialogAssets) {
-    const bySource = new Map(scenes.filter((s: any) => s.voice).map((s: any) => {
-      const m = String(s.voice.path).match(/src-([^/.]+)\.wav$/);
-      return [m ? m[1] : null, s];
-    }).filter(([id]: any[]) => id));
+    /**
+     * Dialog box + speaker stay on for the whole content chapter.
+     * Only mouth/arrow state changes: talk = mouth flap, wait = closed+arrow blink,
+     * gaps (before/between/after lines) = closed no-arrow hold. No flash-off between subs.
+     */
+    const bySource = new Map(
+      scenes
+        .filter((s: any) => s.voice)
+        .map((s: any) => {
+          const m = String(s.voice.path).match(/src-([^/.]+)\.wav$/);
+          return [m ? m[1] : null, s] as const;
+        })
+        .filter(([id]) => id),
+    );
     const fpsFromMs = (ms: number) => Math.max(1, Math.round(ms / frameMs));
     let n = 0;
-    const addDialogClip = (id: string, source: string, start: number, dur: number) => {
+    const addDialogClip = (source: string, start: number, dur: number, kind: string) => {
       if (dur <= 0) return;
-      dialogClips.push({ id, source: outRel(source), timelineStartFrame: start, durationFrames: dur, sourceStartFrame: 0, mode: "still" });
+      dialogClips.push({
+        id: `dialog-${String(n++).padStart(5, "0")}-${kind}`,
+        source: outRel(source),
+        timelineStartFrame: start,
+        durationFrames: dur,
+        sourceStartFrame: 0,
+        mode: "still",
+      });
     };
+
+    type SubWindow = {
+      start: number;
+      end: number;
+      talkEnd: number;
+      id: string;
+      source: string;
+      text: string;
+    };
+
     for (const src of edit.sources || []) {
       const scene = bySource.get(src.id);
       if (!scene) continue;
+
+      const sceneStart = scene.timelineStartFrame as number;
+      const sceneEnd = sceneStart + (scene.durationFrames as number);
+      const windows: SubWindow[] = [];
+
       for (const sub of src.subtitles || []) {
-        const start = scene.timelineStartFrame + fpsFromMs(sub.sourceLocalStartMs || 0);
-        const end = scene.timelineStartFrame + fpsFromMs(sub.sourceLocalEndMs || 0);
-        const dur = Math.max(1, end - start);
+        const start = sceneStart + fpsFromMs(sub.sourceLocalStartMs || 0);
+        const end = sceneStart + fpsFromMs(sub.sourceLocalEndMs || 0);
+        const clampedStart = Math.max(sceneStart, Math.min(sceneEnd, start));
+        const clampedEnd = Math.max(clampedStart, Math.min(sceneEnd, end));
+        const dur = Math.max(1, clampedEnd - clampedStart);
         const talk = Math.max(1, Math.round(dur * 0.7));
-        const wait = Math.max(0, dur - talk);
-        subtitles.push({ id: sub.id, source: src.id, text: sub.text, startFrame: start, durationFrames: dur, talkFrames: talk, waitFrames: wait });
-        let cursorFrame = start;
-        // talk: alternate open/closed no-arrow. Runtime state duration is 1/8s (8Hz mouth state switch).
-        const mouthStep = Math.max(1, Math.round(fps / 8));
+        const talkEnd = Math.min(clampedStart + talk, clampedEnd);
+        const wait = Math.max(0, clampedEnd - talkEnd);
+        windows.push({
+          start: clampedStart,
+          end: clampedEnd,
+          talkEnd,
+          id: sub.id,
+          source: src.id,
+          text: sub.text,
+        });
+        subtitles.push({
+          id: sub.id,
+          source: src.id,
+          text: sub.text,
+          startFrame: clampedStart,
+          durationFrames: dur,
+          talkFrames: talkEnd - clampedStart,
+          waitFrames: wait,
+        });
+      }
+
+      windows.sort((a, b) => a.start - b.start);
+
+      // Cover the entire content scene so speaker + box never drop out mid-chapter.
+      let cursorFrame = sceneStart;
+      const mouthStep = Math.max(1, Math.round(fps / 8)); // 8Hz mouth
+      const blink = Math.max(1, Math.round(fps / 2)); // 2Hz arrow blink
+
+      const fillClosedHold = (from: number, to: number) => {
+        if (to > from) addDialogClip(dialogClosedNoarrow!, from, to - from, "hold");
+      };
+
+      const fillMouth = (from: number, to: number) => {
+        let c = from;
         let mouthOpen = true;
-        while (cursorFrame < start + talk) {
-          const d = Math.min(mouthStep, start + talk - cursorFrame);
-          addDialogClip(`dialog-${String(n++).padStart(5, "0")}-${mouthOpen ? "open" : "closed"}`, mouthOpen ? dialogOpenNoarrow! : dialogClosedNoarrow!, cursorFrame, d);
-          cursorFrame += d;
+        while (c < to) {
+          const d = Math.min(mouthStep, to - c);
+          addDialogClip(
+            mouthOpen ? dialogOpenNoarrow! : dialogClosedNoarrow!,
+            c,
+            d,
+            mouthOpen ? "open" : "closed",
+          );
+          c += d;
           mouthOpen = !mouthOpen;
         }
-        // wait: closed arrow/no-arrow blink. Runtime state duration is 1/2s (2Hz arrow state switch).
-        const blink = Math.max(1, Math.round(fps / 2));
+      };
+
+      const fillWaitBlink = (from: number, to: number) => {
+        let c = from;
         let on = true;
-        while (cursorFrame < end) {
-          const d = Math.min(blink, end - cursorFrame);
-          addDialogClip(`dialog-${String(n++).padStart(5, "0")}-${on ? "arrow" : "noarrow"}`, on ? dialogClosedArrow! : dialogClosedNoarrow!, cursorFrame, d);
-          cursorFrame += d;
+        while (c < to) {
+          const d = Math.min(blink, to - c);
+          addDialogClip(
+            on ? dialogClosedArrow! : dialogClosedNoarrow!,
+            c,
+            d,
+            on ? "arrow" : "noarrow",
+          );
+          c += d;
           on = !on;
         }
+      };
+
+      for (const w of windows) {
+        // Gap before this line (or after previous): closed hold, still visible.
+        if (w.start > cursorFrame) fillClosedHold(cursorFrame, w.start);
+        // Overlap / out-of-order safety: jump cursor forward if needed.
+        cursorFrame = Math.max(cursorFrame, w.start);
+        if (w.talkEnd > cursorFrame) {
+          fillMouth(cursorFrame, w.talkEnd);
+          cursorFrame = w.talkEnd;
+        }
+        if (w.end > cursorFrame) {
+          fillWaitBlink(cursorFrame, w.end);
+          cursorFrame = w.end;
+        }
       }
+      // Trailing silence until chapter ends: keep speaker + box on, mouth closed.
+      if (sceneEnd > cursorFrame) fillClosedHold(cursorFrame, sceneEnd);
     }
   }
 

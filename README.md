@@ -51,13 +51,18 @@ templates/       # HyperFrames scene templates
 
 ## Workflow (skill)
 
-See `skills/undefined-video/SKILL.md`. Stages:
+See `skills/undefined-video/SKILL.md`.
 
-1. **Prep** — normalize loudness, external ASR
-2. **Draft** — survey → init → decide → check
-3. **Lock** — human review of voice + picture
-4. **Finish** — scenes, dialog, BGM, timeline, ASS
-5. **Deliver** — OTIO + optional final.mp4
+**AI authors three files only:** `script.md`, draft decisions in `draft.json`, and `bgm.mml`. Everything else is tools or mechanical landing.
+
+Stages:
+
+1. **Script** — write `script.md`
+2. **Prep** — normalize loudness, external ASR
+3. **Draft** — survey → init → write ranges/cuts → check
+4. **Lock** — human review of voice + picture
+5. **Finish** — scenes/render/dialog (tools) + write `bgm.mml` → timeline + ASS
+6. **Deliver** — OTIO + optional final.mp4
 
 Episode paths are caller policy; the skill documents a conventional `<ep>/` layout.
 

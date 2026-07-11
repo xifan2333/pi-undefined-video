@@ -1,52 +1,49 @@
-# Lock：人声与画面锁定
+# Lock：人声与画面锁定（人审；不创作）
 
-前置：Draft apply 完成。  
-目标：审片人确认可通过；之后默认不改 ranges。
+**完成态**：审片人明确通过本期 ranges；默认冻结会改变人声时长的剪辑决策。
 
-**uvid 相关用 `uvid_*` 工具**；听看用 mpv / xdg-open（shell 可）。
+前置：Draft 完成（全量 check 通过，premix 齐；video 有 evidence）。
 
-## 岗位
+## 正确主链
 
-| 岗位 | 工作 |
+### 1. 备齐审查包
+
+1. **听** — 按 id 播放全部 `clips/src-*.wav`  
+   `mpv --no-video --really-quiet <ep>/clips/src-01.wav …`  
+2. **看（video）** —  
+   `<ep>/.uvid-cache/draft-evidence/**/contact-sheet-*-original.png`  
+   每个 range：out 时结果是否可读；splice 是否跳字/跳窗/半截输出  
+3. 剪辑师用一两句说明取舍  
+
+听 + 看做完，再请审片人表态。
+
+### 2. 门禁
+
+| 审片人 | 下一步 |
 |---|---|
-| AE | 备好听看材料 |
-| 剪辑师 | 说明取舍与风险 |
-| 审片人 | 听 + 看，明确通过或打回 |
-
-## 审查包
-
-1. 听：按 id 顺序 `clips/src-*.wav`  
-   `mpv --no-video --really-quiet <ep>/clips/src-01.wav ...`  
-   需要单文件可 concat 到 `.uvid-cache/preview/preview-voice.wav`
-2. 看（video）：`<ep>/.uvid-cache/draft-evidence/**/contact-sheet-*-original.png`  
-   有视觉模型先审，再 xdg-open；原图不缩放  
-   **必问**：每个 range out 是否还能看懂操作结果？splice 是否跳字/跳窗？  
-   人声干净但画面被砍早 → **不能 lock**，打回延长 out
-3. 只听不算 lock
-
-## 通过 / 打回
-
-- 通过：`可以` / `通过` / `继续` / `lock`
-- 打回：指明 source/range/splice → 改 draft → 增量回验一条命令：
+| `可以` / `通过` / `继续` / `lock` | → Finish |
+| 指出某源/某 range | 按 Draft Contract 改该决策 → 该源 check（`evidence: true`）→ 再听再看 → 再请通过 |
 
 ```text
-uvid_draft_check   draft=<ep>/draft.json,
-                   voiceDir=<ep>/clips,
-                   output=<ep>/.uvid-cache/draft-check,
-                   source=NN, evidence=true
+uvid_draft_check
+  draft:    <ep>/draft.json
+  voiceDir: <ep>/clips
+  output:   <ep>/.uvid-cache/draft-check
+  source:   NN
+  evidence: true
 ```
 
-premix/splices/subtitles/evidence 都在内，读 `summary.json` 的 `actionNeeded` 再审。
+### 3. Lock 之后的约定
 
-## Lock 之后
+| 变更 | 正确路径 |
+|---|---|
+| ranges / word cut | 重开 lock；Finish 下游重做 |
+| 仅 `correctedText` | 更新 subtitles 与后续 ASS |
 
-- 默认冻结会改人声轨时长的 ranges/entries cut
-- 必须改 = 重开 lock，Finish 下游重做
-- 仅 correctedText 可不重开 lock，但要 subtitles + 后续 ASS
+## 完成判据
 
-## 完成标准
+- [ ] 全部人声轨已听  
+- [ ] video evidence 已看  
+- [ ] 审片人明确通过  
 
-- 全部人声轨已听
-- video evidence 已看
-- 审片人明确通过  
-→ Finish
+→ `references/finish.md`
