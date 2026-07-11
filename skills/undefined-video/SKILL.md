@@ -26,7 +26,7 @@ description: >
 
 - **路径相对 episode 工作目录或绝对路径**，不要假设 monorepo / 仓库根
 - 不要 `cd` 进包目录再跑命令；cwd 保持用户工程根或 episode 上级均可，参数写清即可
-- 工具未注册：安装本包后新开 session（`pi install git:github.com/xifan2333/pi-undefined-video` 或本地路径），或走 CLI
+- 工具未注册：安装本包后新开 session（`pi install npm:pi-undefined-video` 或本地路径），或走 CLI
 - ASR 用环境转写工具（如 `transcribe_media`），不是 uvid；hyperframes / mpv / ffmpeg 抽查可用 shell
 
 ### 包根与内置资源（安装位置无关）
