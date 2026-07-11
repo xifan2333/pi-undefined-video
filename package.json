@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/xifan2333/pi-undefined-video#readme",
   "bin": {
-    "uvid": "./bin/uvid.mjs"
+    "uvid": "bin/uvid.mjs"
   },
   "files": [
     "assets",
