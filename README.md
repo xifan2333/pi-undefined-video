@@ -7,15 +7,14 @@ Install as a [pi package](https://pi.dev) (loads extensions + skills), or use th
 ## Install
 
 ```bash
-# local path
-pi install /path/to/pi-undefined-video
-
-# or after cloning
-git clone git@github.com:xifan2333/pi-undefined-video.git
-pi install ./pi-undefined-video
+# from GitHub (recommended)
+pi install git:github.com/xifan2333/pi-undefined-video
 
 # project-scoped
-pi install ./pi-undefined-video -l
+pi install git:github.com/xifan2333/pi-undefined-video -l
+
+# local path (development)
+pi install /path/to/pi-undefined-video
 ```
 
 Open a new pi session after install so tools/skills reload.
