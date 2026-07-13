@@ -1,120 +1,107 @@
 ---
 name: undefined-video
 description: >
-  Episode video production workflow driven by uvid (pi-undefined-video).
-  Given an episode directory with script.md + raw media, produce draft.json,
-  timeline, RPG-style subtitles, and a final cut. Use when the user mentions
-  uvid, draft.json, RPG dialog/subtitles, pi-undefined-video, 期视频, 这一期,
-  剪辑, 成片, 台本, 人声轨, 锁轨, 包装, or asks to prep/draft/lock/finish/deliver
-  a multi-source talking-head or screen-capture episode under a date/episode
-  folder. Prefer this over generic video skills when the project already uses
-  the uvid episode layout (script.md + raw/ + clips/).
+  Episode workflow for pi-undefined-video. Use for prep (script.md → normalize →
+  ASR → audio static visuals), sparse edit intent (edit.json), and post-edit
+  compile (timeline.json → video / captions / otio). Trigger on uvid,
+  undefined-video, episode video, script.md, edit.json, timeline.json, raw
+  media, prep, normalize, transcription, ASR, cache, hold_until, generate
+  timeline/video/captions, or reviewing episode cuts.
 ---
 
 # undefined-video
 
-把一期 `script.md + raw/` 做成可继续改的工程，再按需出成片。
+Use this skill for episode **prep**, **edit intent**, and **post-edit compile**.
 
-**AI 只创作三份文件**，其余全是工具执行或机械落地：
-
-| # | 创作物 | 是什么 | Contract |
-|---|---|---|---|
-| 1 | `script.md` | 台本：章节、媒体引用、口播/正文 | `references/script.md` |
-| 2 | `draft.json` 里的决策 | 保留哪些话、切点、word cut | `references/draft.md` |
-| 3 | `bgm.mml` | 片中 BGM 编曲 | `references/bgm.md` |
-
-**不是创作**：normalize、ASR、survey/init/check、plan、场景目录、render、dialog 图、timeline、ass、otio、final——按 reference 里的参数调用工具即可。audio 章 md = 从台本剥标签，不是新写正文。
-
-**uvid** = 工件 → 工件 filter。调用 `uvid_*` 时显式传参。路径相对 episode 或绝对路径。ASR 用环境转写；hyperframes / mpv 用 shell。
-
-## 正确主链
+Stable scopes:
 
 ```text
-写 script.md
-  → Prep（工具）→ Draft：读证据 → 写 draft 决策 → check（工具）
-  → Lock（人）→ 写 bgm.mml + Finish 工具链 → Deliver（工具）
+prep:     script.md → normalize → ASR → audio-block static visuals
+edit:     cache ASR → edit.json sparse actions → atomic evidence
+compile:  edit.json → timeline.json → video / captions / otio
 ```
 
-```text
-raw ─normalize→ clips ─ASR→ asr.json
-  ─survey → init → 【写 ranges/cut】→ check→ src-NN.wav
-  ─lock→ plan → scenes/render/dialog → 【写 bgm.mml】→ bgm.mp3 → timeline → ass
-  ─otio / final.mp4
-```
+Do not invent parallel formats. In particular:
 
-| 阶段 | 人/AI 创作？ | 做什么 | 详文 |
-|---|---|---|---|
-| Script | **写** `script.md` | 台本一次写对 | `references/script.md` |
-| Prep | 否 | 每源 normalize + 字级 ASR | `references/prep.md` |
-| Draft | **写** draft 决策 | survey/init → 一次写满 ranges/cut → check | `references/draft.md` |
-| Lock | 审片人 | 听 `src-*.wav` + 看 evidence → 明确通过 | `references/lock.md` |
-| Finish | **写** `bgm.mml`；其余工具 | plan 清单落地 + 编曲导出 + timeline/ass | `references/finish.md`、`bgm.md` |
-| Deliver | 否 | otio；需要时 final | `references/deliver.md` |
+- Do not create any `draft.json` or other parallel edit artifact; `edit.json` is the only intent file.
+- `edit.json` follows `schemas/edit.schema.json` (v0.1). Read `references/edit.md`.
+- `timeline.json` (`uvid.timeline`) is the only intermediate geometry product. Schema: `schemas/timeline.schema.json`.
+- Soft cuts (edge snap / afade) are compile defaults, not new edit ops.
+- Packaging is applied by `generate timeline`, not by `generate video`: `--intro` / `--outro` are explicit media paths (duration probed); TOC via `--toc-before ID,ID,…`.
+- RPG typewriter captions: `generate captions -o out.ass` — karaoke `\k`, 1 event/turn, transparent Secondary (unrevealed glyphs do not paint). Style knobs: `--fg` / `--bg` / `--font` / `--font-size`. Preview SRT stays turn-level.
+- Do not add ASR to this package; ASR comes from `transcribe_media`.
 
-上游完成态未达成，不进下游。
+## Files that matter now
 
-## 从磁盘选阶段
-
-| 磁盘状态 | 进入 |
+| Path | Role |
 |---|---|
-| 无 `script.md` 或台本不对 | 写/改台本 |
-| 有 script+raw，缺 clips 或 asr | Prep |
-| clips+asr 齐，缺 draft 决策 | Draft（写决策） |
-| 有决策，check 未过 / 缺 `src-*.wav` | 按 draft Contract 改决策 → check |
-| premix 齐，未 lock | Lock |
-| 已 lock，缺 bgm/timeline/ass | Finish（先写 bgm，再跑工具链） |
-| 有 timeline，要 OTIO/成片 | Deliver |
+| `script.md` | Episode script and source declarations |
+| `edit.json` | Sparse editing intent (v0.1) |
+| `timeline.json` | Compiled program geometry (`uvid.timeline`) |
+| `raw/` | Original recorded media |
+| `cache/<id>/` | Prep outputs for each source |
+| `schemas/edit.schema.json` | Machine schema for `edit.json` |
+| `schemas/timeline.schema.json` | Machine schema for `timeline.json` |
+| `clips/` | Later timeline/deliver material pool |
 
-## Episode 布局
+## When prepping an episode
 
-```text
-<ep>/
-├── script.md      ← 创作 1
-├── draft.json     ← 创作 2（决策写在这；骨架/派生字段工具填）
-├── bgm.mml        ← 创作 3
-├── timeline.json
-├── timeline.otio
-├── subtitles.ass
-├── final.mp4
-├── raw/
-├── clips/
-└── .uvid-cache/
+Read `references/prep.md` and follow it exactly.
+
+Also read `references/script.md` when checking or extracting `script.md` structure.
+
+## When authoring or reviewing edit.json
+
+Read `references/edit.md` and follow it exactly.
+
+Skeleton after prep — equal-length multi-args (or single source):
+
+```bash
+uvid generate edit \
+  -i cache/01/asr.json,cache/02/asr.json -o edit.json \
+  --id 01,02 --type audio,video \
+  --media cache/01/normalized.mp3,cache/02/normalized.mp4 \
+  --visual cache/01/visual.png,-
 ```
 
-## 包资源
+Validate shape against package schema `schemas/edit.schema.json`.
 
-`<pkg>` = 本 skill 目录上两级（`skills/undefined-video/../..`）。
+Review order:
 
-| 用途 | 路径 |
+```text
+subtitle-draft → audio-reviewed → video-reviewed → ready
+```
+
+Use atomic tools only (`analyze silence/waveform/frame-diff`, frame stills). Any unresolved `check` blocks `ready`.
+
+## After edit is ready — compile
+
+```bash
+# geometry — bind ALL product assets onto timeline (packaging / dialog / bgm / ASS look)
+uvid generate timeline -i edit.json -o timeline.aroll.json
+uvid generate timeline -i edit.json -o timeline.program.json \
+  --intro clips/intro.mp4 --outro clips/outro.mp4 \
+  --toc-before 02,03,04 --toc clips/toc1.mp4,clips/toc2.mp4,clips/toc3.mp4 \
+  --dialog clips/dialog --bgm clips/bgm.mp3 \
+  --fg '#abb2bf' --bg '#282c34'
+
+# episode mp4 from timeline only (no side asset flags)
+uvid generate video -i timeline.program.json -o program-final.mp4 --quality draft
+
+# optional side exports (also from timeline)
+uvid generate captions -i timeline.program.json -o out.ass
+uvid generate captions -i timeline.program.json -o out.srt
+uvid generate otio -i timeline.program.json -o out.otio
+```
+
+Boundary: `generate render` = scene dir → one media. Episode assemble = `generate video` reading **only** `timeline.json` (assets already bound: packaging, `dialog[]`, `dialogSprites`, `bgm`, `captionsStyle`).
+
+## Creative files
+
+Three AI/human-authored files:
+
+| File | Status |
 |---|---|
-| outro 头像 | `<pkg>/assets/avator.png` |
-| dialog sprite | `<pkg>/assets/speaker-sprite-data.js` |
-| intro/toc/outro sfx | `<pkg>/assets/intro.mp3` 等 |
-
-## 三份创作物怎么写对
-
-写之前读对应 Contract；**一次写成正确形状**；值来自内容判断 / survey / 音乐意图，**不来自报错试探**。写完再用工具验收或导出。
-
-1. **台本** — `references/script.md`：`fps` 必填；`##` 进 TOC；媒体 `raw/NN.ext`  
-2. **draft 决策** — `references/draft.md`：只写 range 的 in/out 与 word cut；派生字段交给 check；video out = 画面完成态  
-3. **BGM** — `references/bgm.md`：`title/tempo/S1/S2/TR` 键值行；再 `uvid_finish_bgm`  
-
-## 工具阶段怎么做对（不创作）
-
-进阶段读全文，按参数调用，不临场发明清单：
-
-- **Prep** — normalize（`-16`/`-1.5`/`11`）→ 字级 ASR  
-- **Draft 工具侧** — survey → init →（你写决策）→ check  
-- **Lock** — 听看包齐 → 等明确通过  
-- **Finish 工具侧** — plan **原样**落地场景/render/dialog →（你写 bgm）→ timeline → ass  
-- **Deliver** — otio；要成片再 render  
-
-## 短禁区
-
-1. 不要把 plan/scene/ass/md 提取当成「创作」——照抄或剥标签  
-2. 章节 TOC 用 `##`  
-3. video `sourceEndMs` = 画面完成态  
-4. range 不手写 `durationMs` / `sourceLocal*` / `subtitles`  
-5. Lock 通过后再 Finish  
-6. hyperframes 一次渲染一个场景  
-7. 包路径用 `<pkg>/…`  
+| `script.md` | Stable; see `references/script.md` |
+| `edit.json` | v0.1 contract; see `references/edit.md` + `schemas/edit.schema.json` |
+| `bgm.mml` | Stable enough for BGM generation; see `references/bgm.md` |

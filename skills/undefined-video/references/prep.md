@@ -1,63 +1,175 @@
-# Prep：入库与整理（工具；不创作）
+# Prep: stable front-loaded workflow
 
-台本已按 `references/script.md` 写好。本阶段只跑工具。
+Prep turns the `raw/NN.ext` media referenced by `script.md` into the basic assets needed for later AI editing.
 
-**完成态**：script 每个媒体引用都有对应 `clips/NN.*` 与含 `words` 的 `.uvid-cache/asr/NN.json`。
+The current stable prep scope has only four steps:
 
-## Contract
+```text
+1. Read script.md
+2. Normalize raw media into cache/<id>/normalized.*
+3. Run ASR with transcribe_media into cache/<id>/asr.*
+4. Generate static visuals for <audio> blocks
+```
 
-| 项 | 正确值 |
-|---|---|
-| 源列表 | `script.md` 全部 `<video src>` / `<audio src>` |
-| source id | 媒体基名 `NN` |
-| 响度 | `I=-16 LUFS`，`TP=-1.5 dBTP`，`LRA=11` |
-| clips 路径 | `clips/NN.*`（基名与 raw 一致） |
-| ASR 路径 | `.uvid-cache/asr/NN.json` |
-| ASR 形状 | `[{ text, startMs, endMs, words: [{ text, startMs, endMs }] }]` |
-| 不转写 | intro / toc / outro / bgm |
+Do not make editing decisions during prep.
 
-## 正确主链
+## Directory convention
 
-### 1. 列源
+```text
+<episode>/
+├── script.md
+├── raw/
+│   ├── 01.mp4
+│   └── ...
+├── cache/
+│   ├── 01/
+│   │   ├── normalized.mp3
+│   │   ├── asr.json
+│   │   ├── asr.srt
+│   │   ├── asr.txt
+│   │   ├── visual.md      # audio source only
+│   │   ├── scene/         # audio source only, optional render source
+│   │   └── visual.png     # audio source only
+│   └── 02/
+│       ├── normalized.mp4
+│       ├── asr.json
+│       ├── asr.srt
+│       └── asr.txt
+└── clips/
+```
+
+Use `cache/<source-id>/...`, not `cache/<artifact-kind>/<id>...`.
+
+## Step 1: read script.md
+
+Read `script.md` directly. Do not call an `analyze script` tool.
+
+Extract every media tag:
 
 ```html
-<audio src="raw/01.mp4"></audio>
-<video src="raw/02.mp4"></video>
+<audio src="raw/NN.ext"></audio>
+<video src="raw/NN.ext"></video>
 ```
 
-### 2. 归一化（每源一次）
+Rules:
+
+- `NN` is the source id.
+- `<audio>` means later editing is audio-only; its picture comes from markdown/static visuals.
+- `<video>` means later editing must consider both sound and picture.
+- Preserve source order from `script.md`.
+
+## Step 2: normalize
+
+Create the source cache directory first:
+
+```bash
+mkdir -p cache/NN
+```
+
+For `<audio>` sources, output audio-only MP3:
+
+```bash
+uvid generate normalize \
+  -i raw/NN.ext \
+  -o cache/NN/normalized.mp3 \
+  --lufs -16 --tp -1.5 --lra 11
+```
+
+For `<video>` sources, keep video in MP4 and normalize audio:
+
+```bash
+uvid generate normalize \
+  -i raw/NN.ext \
+  -o cache/NN/normalized.mp4 \
+  --format mp4 \
+  --lufs -16 --tp -1.5 --lra 11
+```
+
+Do not write normalized prep media to `clips/`. `clips/` is for later timeline/deliver assets.
+
+## Step 3: ASR
+
+Use the separate JianYing subtitle plugin tool `transcribe_media`.
+
+For each normalized source, write all three formats:
 
 ```text
-工具：uvid_prep_normalize
-input:  20260709/raw/01.mp4
-output: 20260709/clips/01.mp4
-lufs:   -16
-tp:     -1.5
-lra:    11
+cache/NN/asr.json
+cache/NN/asr.srt
+cache/NN/asr.txt
 ```
 
-之后全程用 `clips/NN.*`。
-
-### 3. 字级 ASR（每源一次，同步完成后再下一个）
+Tool call shape:
 
 ```text
-input:   20260709/clips/01.mp4
-formats: ["json", "srt"]
-output:  20260709/.uvid-cache/asr/01
+transcribe_media(
+  input:  "cache/NN/normalized.mp3" or "cache/NN/normalized.mp4",
+  output: "cache/NN/asr",
+  formats: ["json", "srt", "txt"]
+)
 ```
 
-### 4. 对齐
+Request `json` because later editing needs word/segment timing.
+
+## Step 4: static visuals for audio blocks
+
+For each `<audio>` source, extract that media block's markdown body from `script.md`:
+
+- Remove the `<audio ...></audio>` tag.
+- Keep the surrounding markdown content in that `---` block.
+- Write it to:
 
 ```text
-script 引用数 = clips/NN.* = .uvid-cache/asr/NN.json
+cache/NN/visual.md
 ```
 
-台本结构本身不对时，先按 `references/script.md` 写对台本。
+Then generate a static visual from `visual.md` with the two atomic scene tools:
 
-## 完成判据
+```bash
+# 1) scene project (directory product)
+uvid generate scene \
+  --type markdown \
+  --theme <theme-from-script> \
+  -i cache/NN/visual.md \
+  -o cache/NN/scene \
+  --duration 1
 
-- [ ] 每个 script 引用都有 `clips/NN.*`  
-- [ ] 每个源都有含 `words` 的 `asr/NN.json`  
-- [ ] 尚未进入 draft 决策 / 场景渲染  
+# 2) one still PNG (fast path: -f png → hyperframes snapshot, not full video render)
+uvid generate render \
+  -i cache/NN/scene \
+  -o cache/NN/visual.png \
+  -f png
 
-→ `references/draft.md`
+# Intermediate only — not required by the checklist:
+rm -rf cache/NN/scene
+```
+
+Do **not** use `-f png-sequence` or full video render for prep stills. Keep the two steps separate: `generate scene` authors the project, `generate render` turns it into media.
+
+`cache/NN/visual.png` is a static source for later timeline work. Prep does not decide how long it appears.
+
+## Completion checklist
+
+For every source in `script.md`:
+
+- [ ] `cache/NN/normalized.mp3` for `<audio>` or `cache/NN/normalized.mp4` for `<video>` exists.
+- [ ] `cache/NN/asr.json` exists.
+- [ ] `cache/NN/asr.srt` exists.
+- [ ] `cache/NN/asr.txt` exists.
+
+For every `<audio>` source:
+
+- [ ] `cache/NN/visual.md` exists.
+- [ ] `cache/NN/visual.png` exists.
+
+Stop after this. Next stage is edit intent skeleton (equal-length multi-args):
+
+```bash
+uvid generate edit \
+  -i cache/01/asr.json,cache/02/asr.json -o edit.json \
+  --id 01,02 --type audio,video \
+  --media cache/01/normalized.mp3,cache/02/normalized.mp4 \
+  --visual cache/01/visual.png,-
+```
+
+Waveform, silence, frame-diff, cut decisions, timeline, and delivery are later stages. See `references/edit.md`.

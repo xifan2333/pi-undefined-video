@@ -76,17 +76,6 @@ export async function mediaDurationMs(file: string, opts: ExecOpts = {}): Promis
   return n;
 }
 
-export async function videoFrames(file: string, fps: number, opts: ExecOpts = {}): Promise<number> {
-  const out = await probe(
-    file,
-    ["-select_streams", "v:0", "-count_frames", "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0"],
-    opts,
-  );
-  const n = Number.parseInt(out, 10);
-  if (Number.isFinite(n) && n > 0) return n;
-  return Math.round((await mediaDurationMs(file, opts)) / 1000 * fps);
-}
-
 export async function hasVideoStream(file: string, opts: ExecOpts = {}): Promise<boolean> {
   try {
     const out = await probe(file, ["-select_streams", "v:0", "-show_entries", "stream=index", "-of", "csv=p=0"], opts);
@@ -96,14 +85,84 @@ export async function hasVideoStream(file: string, opts: ExecOpts = {}): Promise
   }
 }
 
-/** Decode any media to mono s16le PCM samples. */
-export async function decodeMonoPcm(input: string, sampleRate: number, opts: ExecOpts = {}): Promise<Int16Array> {
-  const buf = await execBuffer(
-    "ffmpeg",
-    ["-hide_banner", "-loglevel", "error", "-i", input, "-vn", "-ac", "1", "-ar", String(sampleRate), "-f", "s16le", "pipe:1"],
-    opts,
-  );
+export async function hasAudioStream(file: string, opts: ExecOpts = {}): Promise<boolean> {
+  try {
+    const out = await probe(file, ["-select_streams", "a:0", "-show_entries", "stream=index", "-of", "csv=p=0"], opts);
+    return out.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+export interface DecodePcmOpts extends ExecOpts {
+  /** Inclusive start on source timeline (ms). */
+  fromMs?: number;
+  /** Exclusive end on source timeline (ms). */
+  toMs?: number;
+}
+
+/** Decode any media to mono s16le PCM samples (optional half-open [fromMs, toMs)). */
+export async function decodeMonoPcm(
+  input: string,
+  sampleRate: number,
+  opts: DecodePcmOpts = {},
+): Promise<Int16Array> {
+  const fromMs = opts.fromMs != null && opts.fromMs > 0 ? Math.floor(opts.fromMs) : 0;
+  const toMs = opts.toMs != null ? Math.floor(opts.toMs) : undefined;
+  if (toMs != null && toMs <= fromMs) {
+    throw new UvidError(`PCM window empty: fromMs=${fromMs} toMs=${toMs}`);
+  }
+
+  const args = ["-hide_banner", "-loglevel", "error", "-i", input, "-vn"];
+  if (fromMs > 0) args.push("-ss", (fromMs / 1000).toFixed(3));
+  if (toMs != null) args.push("-t", ((toMs - fromMs) / 1000).toFixed(3));
+  args.push("-ac", "1", "-ar", String(sampleRate), "-f", "s16le", "pipe:1");
+
+  const buf = await execBuffer("ffmpeg", args, opts);
   return new Int16Array(buf.buffer, buf.byteOffset, Math.floor(buf.byteLength / 2));
+}
+
+/** Stats printed by loudnorm `print_format=json` (all values are strings). */
+export interface LoudnormMeasure {
+  input_i: string;
+  input_tp: string;
+  input_lra: string;
+  input_thresh: string;
+  target_offset: string;
+  output_i?: string;
+  output_tp?: string;
+  output_lra?: string;
+  output_thresh?: string;
+  normalization_type?: string;
+}
+
+/** Pull the JSON object ffmpeg dumps after the loudnorm filter. */
+function parseLoudnormJson(log: string): LoudnormMeasure {
+  const start = log.lastIndexOf("{");
+  const end = log.lastIndexOf("}");
+  if (start < 0 || end <= start) {
+    throw new UvidError("could not find loudnorm first-pass JSON in ffmpeg output");
+  }
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(log.slice(start, end + 1));
+  } catch (e) {
+    throw new UvidError(`loudnorm JSON parse failed: ${(e as Error).message}`);
+  }
+  const need = ["input_i", "input_tp", "input_lra", "input_thresh", "target_offset"] as const;
+  for (const key of need) {
+    if (typeof raw[key] !== "string") {
+      throw new UvidError(`loudnorm JSON missing field: ${key}`);
+    }
+  }
+  return raw as unknown as LoudnormMeasure;
+}
+
+export interface LoudnormMeasureOpts extends ExecOpts {
+  /** Inclusive start on source timeline (ms). */
+  fromMs?: number;
+  /** Exclusive end on source timeline (ms). */
+  toMs?: number;
 }
 
 /** loudnorm first pass: measure input loudness, return the parsed JSON stats. */
@@ -112,13 +171,27 @@ export async function loudnormMeasure(
   targetLufs: number,
   truePeak: number,
   lra: number,
-  opts: ExecOpts = {},
-): Promise<any> {
-  const log = await ffmpeg(
-    ["-i", input, "-af", `loudnorm=I=${targetLufs}:TP=${truePeak}:LRA=${lra}:print_format=json`, "-f", "null", "-"],
-    opts,
+  opts: LoudnormMeasureOpts = {},
+): Promise<LoudnormMeasure> {
+  const fromMs = opts.fromMs != null && opts.fromMs > 0 ? Math.floor(opts.fromMs) : 0;
+  const toMs = opts.toMs != null ? Math.floor(opts.toMs) : undefined;
+  if (toMs != null && toMs <= fromMs) {
+    throw new UvidError(`loudnorm window empty: fromMs=${fromMs} toMs=${toMs}`);
+  }
+
+  const args: string[] = [];
+  if (fromMs > 0) args.push("-ss", (fromMs / 1000).toFixed(3));
+  if (toMs != null) args.push("-t", ((toMs - fromMs) / 1000).toFixed(3));
+  args.push(
+    "-i",
+    input,
+    "-af",
+    `loudnorm=I=${targetLufs}:TP=${truePeak}:LRA=${lra}:print_format=json`,
+    "-f",
+    "null",
+    "-",
   );
-  const match = log.match(/\{[\s\S]*?"target_offset"\s*:\s*"[^"]+"[\s\S]*?\}/);
-  if (!match) throw new UvidError("could not parse loudnorm first-pass JSON");
-  return JSON.parse(match[0]);
+
+  const log = await ffmpeg(args, opts);
+  return parseLoudnormJson(log);
 }

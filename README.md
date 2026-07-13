@@ -1,74 +1,65 @@
 # pi-undefined-video
 
-Pi package + CLI for episode video production: prep → draft → finish → deliver.
+Pi package + `uvid` CLI: **atomic media filters** for episode video production.
 
-Install as a [pi package](https://pi.dev) (loads extensions + skills), or use the `uvid` CLI.
+Two families:
+
+| Family | Role | Main output |
+|---|---|---|
+| `analyze` | evidence | one JSON (stdout or `-o`) |
+| `generate` | artifact | one media/file (stdout or `-o`) |
+
+## I/O contract
+
+```text
+-i FILE   read that file
+(omit -i) read stdin          # CLI; tools should pass paths
+-o FILE   write that file
+(omit -o) write stdout        # CLI; JSON tools return text in result
+```
+
+Shell pipes and redirections compose filters. **No multi-file side writes** inside a command. One invocation = one input stream + one output stream. Loop outside for many files.
+
+```bash
+uvid analyze waveform -i clip.mp4 | uvid analyze silence -o silence.json
+uvid analyze frame-diff -i clip.mp4 -o diff.json
+uvid generate frame -i clip.mp4 --at-ms 21600 -o still.jpg
+uvid generate normalize -i raw/01.mp4 -o clips/01.mp3 --lufs -16 --tp -1.5 --lra 11
+# default audio format is mp3; override: -f wav | -f aac | -f mp4 (keep video)
+```
 
 ## Install
 
 ```bash
-# npm (recommended)
 pi install npm:pi-undefined-video
-
-# project-scoped
-pi install npm:pi-undefined-video -l
-
-# GitHub
-pi install git:github.com/xifan2333/pi-undefined-video
-
-# local path (development)
+# or local
 pi install /path/to/pi-undefined-video
+npm install -g pi-undefined-video   # optional: uvid on PATH
 ```
 
-Also install the CLI globally if you want `uvid` on PATH:
+Package loads extensions + skills via `package.json` `pi` key. Open a new pi session after install.
 
-```bash
-npm install -g pi-undefined-video
-```
-
-Open a new pi session after install so tools/skills reload.
-
-## CLI
-
-```bash
-uvid flow
-uvid <stage> <action> --help
-uvid prep normalize -i ep/raw/01.mp4 -o ep/clips/01.mp4 --lufs -16 --tp -1.5 --lra 11
-```
-
-The published bin runs TypeScript via `tsx` (bundled dependency).
-
-## Package layout
+## Architecture
 
 ```text
-assets/          # avatar, sfx, themes, speaker sprite
-extensions/      # pi tools (uvid_*)
-schemas/         # draft.json schema
-skills/          # episode workflow skill
-src/             # CLI + library (spec is the single source of truth)
-templates/       # HyperFrames scene templates
+src/spec.ts                 # command table + TypeBox (CLI + pi tools)
+src/cli.ts                  # flag adapter (stderr diagnostics)
+extensions/*.ts             # pi.registerTool from the same table
+src/lib/io.ts               # -i/-o/stdin/stdout
+src/lib/analyze/<cmd>.ts    # one module per analyze command
+src/lib/generate/<cmd>.ts   # one module per generate command
+src/lib/analyze|generate/index.ts  # re-export only
 ```
 
-## Workflow (skill)
+CLI and pi tools never drift: both run `CommandSpec.run` in-process.
 
-See `skills/undefined-video/SKILL.md`.
+## AI-authored files (skill)
 
-**AI authors three files only:** `script.md`, draft decisions in `draft.json`, and `bgm.mml`. Everything else is tools or mechanical landing.
+Only three creative artifacts: `script.md`, `edit.json` (sparse cuts; `schemas/edit.schema.json`), `bgm.mml`. Everything else is filters or mechanical landing. See `skills/undefined-video/`.
 
-Stages:
+## Directory-level batching
 
-1. **Script** — write `script.md`
-2. **Prep** — normalize loudness, external ASR
-3. **Draft** — survey → init → write ranges/cuts → check
-4. **Lock** — human review of voice + picture
-5. **Finish** — scenes/render/dialog (tools) + write `bgm.mml` → timeline + ASS
-6. **Deliver** — OTIO + optional final.mp4
-
-Episode paths are caller policy; the skill documents a conventional `<ep>/` layout.
-
-## Peer dependencies
-
-Listed in `package.json` (`@earendil-works/pi-*`, `typebox`). Pi supplies these when loading the package as an extension.
+**Not defined yet** as a CLI feature. Until then: one file per invocation (`for f in …; do uvid … -i "$f" -o …; done`).
 
 ## License
 

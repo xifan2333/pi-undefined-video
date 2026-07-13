@@ -48,10 +48,12 @@
   <body>
     <div id="root" data-theme="__THEME__"
          data-composition-id="__COMP_ID__"
-         data-start="0" data-duration="__DURATION__"
+         data-start="0" data-duration="3"
          data-width="1280" data-height="720" data-fps="25">
       <div id="menu"><div id="mtitle">章节</div><div id="rows"><div id="cursor"></div></div></div>
       <div class="watermark"><span class="at">@</span> 未定义项目</div>
+      <!-- SFX owned by composition (assets/toc.mp3 ≈ 2.4s); length is not a CLI flag. -->
+      <audio id="sfx" data-start="0" data-duration="2.4" data-track-index="9" src="assets/toc.mp3"></audio>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
@@ -67,6 +69,8 @@
       });
       const clamp01 = v => Math.max(0, Math.min(1, v));
       const easeOut = v => 1 - Math.pow(1 - clamp01(v), 3);
+      // Timeline owned by this composition (not a CLI flag). Fade ends ~3.0s.
+      const DURATION = 3;
       const START_AT = .55, MOVE_AT = 1.05, MOVE_DUR = .42, CONFIRM_AT = 1.55, FADE_AT = 2.62;
       function cursorPos(t) {
         if (t < MOVE_AT) return PREV;
@@ -106,7 +110,7 @@
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
       tl.eventCallback("onUpdate", render);
-      tl.to({}, { duration: __DURATION__ }, 0);
+      tl.to({}, { duration: DURATION }, 0);
       render();
       window.__timelines["__COMP_ID__"] = tl;
     </script>

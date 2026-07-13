@@ -1,464 +1,626 @@
 /**
- * uvid command spec — the single source of truth.
+ * uvid command spec — single source of truth for CLI + pi tools.
  *
- * Commands are grouped by production stage (prep / draft / finish / deliver).
- * Style: `uvid <stage> <action> [flags]`. Prefer two-level paths.
+ * Two families of single-stream filters:
+ *   analyze  — evidence: input → one JSON
+ *   generate — artifact: input → one media/file
  *
+ * I/O:
+ *   -i FILE  read file; omit → stdin (CLI)
+ *   -o FILE  write main artifact to that path; stdout prints the absolute path
+ *            omit -o → main artifact bytes/text on stdout (CLI)
+ * Shell pipes/redirections are the composition mechanism.
+ *
+ * Directory batching is not a CLI concern: loop outside.
  * Both adapters are generated from this table:
- *   - src/cli.ts turns properties into --kebab-case flags (aliases: input→-i, output→-o)
- *   - extensions/undefined-video.ts registers each entry as a pi tool `uvid_<path>_…`
- *
- * Adding a parameter = editing exactly one schema here.
+ *   - src/cli.ts → flags
+ *   - extensions/undefined-video.ts → uvid_<path>_… tools
  */
 import { Type, type TObject } from "typebox";
+import {
+  analyzeFrameDiff,
+  analyzeLoudness,
+  analyzeSilence,
+  analyzeWaveform,
+} from "./lib/analyze/index.ts";
+import {
+  generateBgm,
+  generateCaptions,
+  generateEdit,
+  generateFrame,
+  generateNormalize,
+  generateOtio,
+  generateRender,
+  generateScene,
+  generateSheet,
+  generateTimeline,
+  generateVideo,
+} from "./lib/generate/index.ts";
+import { preview } from "./lib/preview.ts";
 import type { Ctx } from "./lib/util.ts";
-import { audioCreateLoudness, audioGetLoudness, audioGetWaveform } from "./lib/prep.ts";
-import { audioCreateBgm } from "./lib/bgm.ts";
-import { audioGetCutpoints } from "./lib/cutpoints.ts";
-import { audioCreatePremix, audioGetSplices } from "./lib/premix.ts";
-import { draftEvidence, draftInit, draftSubtitles, draftSurvey, draftValidate } from "./lib/draft.ts";
-import { draftCheck } from "./lib/check.ts";
-import { timelineCreateMain, timelineCreateOtio, timelinePlan } from "./lib/timeline.ts";
-import { subtitleCreateAss } from "./lib/subtitle.ts";
-import { imageCreateDialog, sceneCreate } from "./lib/scene.ts";
-import { videoRenderFinal } from "./lib/deliver.ts";
 
 export interface CommandSpec {
-  /** CLI command path, e.g. ["draft", "premix"]. */
   path: string[];
+  /** analyze | generate | meta */
+  family: "analyze" | "generate" | "meta";
   summary: string;
-  /** Long description for the pi tool (falls back to summary). */
   description?: string;
-  /**
-   * Artifact kinds this command reads / writes. Together these declare the
-   * pipeline: every command is a filter between artifacts on disk, and
-   * `uvid flow` prints the full topology. Kinds are contracts (draft.json
-   * schema, asr json shape, …), never concrete paths — paths are the
-   * caller's policy.
-   */
   consumes?: string[];
   produces?: string[];
   params: TObject;
+  /** CLI: collect trailing non-flag args into params.paths (string[]). */
+  positionals?: boolean;
   run: (params: any, ctx: Ctx) => Promise<void>;
 }
 
-export const commands: CommandSpec[] = [
-  // ── prep ──────────────────────────────────────────────────────────────
-  {
-    path: ["prep", "loudness"],
-    summary: "measure integrated loudness of one audio/video source",
-    description:
-      "Prep stage: measure integrated loudness (I/LRA/Peak via ebur128). " +
-      "CLI: `uvid prep loudness -i INPUT`.",
-    consumes: ["media"],
-    produces: ["loudness stats (log)"],
-    params: Type.Object({
-      input: Type.String({ description: "Input audio/video file" }),
+const ioParams = {
+  input: Type.Optional(
+    Type.String({
+      description: "Input file; omit to read stdin (CLI only; tools should pass a path)",
     }),
-    run: audioGetLoudness,
+  ),
+  output: Type.Optional(
+    Type.String({
+      description:
+        "Output file for the main artifact; when set, file is written and stdout prints its absolute path " +
+        "(omit → artifact on stdout; tools: JSON may go to result text, binary needs a path)",
+    }),
+  ),
+};
+
+export const commands: CommandSpec[] = [
+  // ── analyze ───────────────────────────────────────────────────────────
+  {
+    path: ["analyze", "loudness"],
+    family: "analyze",
+    summary: "measure integrated loudness (ebur128) → JSON",
+    description:
+      "Analyze: ffmpeg ebur128 → one JSON object {I, LRA, peak}. " +
+      "Optional half-open window [--from-ms A --to-ms B]. " +
+      "CLI: `uvid analyze loudness [-i MEDIA] [-o JSON] [--from-ms 0] [--to-ms N]`.",
+    consumes: ["media"],
+    produces: ["analyze.loudness JSON"],
+    params: Type.Object({
+      ...ioParams,
+      fromMs: Type.Optional(Type.Number({ description: "Window start ms (inclusive); default 0" })),
+      toMs: Type.Optional(Type.Number({ description: "Window end ms (exclusive); omit = end of media" })),
+    }),
+    run: analyzeLoudness,
   },
   {
-    path: ["prep", "normalize"],
-    summary: "loudness-normalize one source into clips/ (prep)",
+    path: ["analyze", "waveform"],
+    family: "analyze",
+    summary: "windowed RMS/peak waveform → JSON",
     description:
-      "Prep stage: create a loudness-normalized copy (two-pass linear loudnorm). " +
-      "Voice targets for this workflow are typically I=-16 LUFS, TP=-1.5 dBTP, LRA=11. " +
-      "CLI: `uvid prep normalize -i INPUT -o OUTPUT --lufs N --tp N --lra N`.",
+      "Analyze: decode mono PCM, window RMS/peak → one waveform JSON. " +
+      "Optional half-open window; window times are absolute source ms. " +
+      "CLI: `uvid analyze waveform [-i MEDIA] [-o JSON] [--window-ms 50] [--sample-rate 48000] [--from-ms 0] [--to-ms N]`.",
+    consumes: ["media"],
+    produces: ["analyze.waveform JSON"],
+    params: Type.Object({
+      ...ioParams,
+      windowMs: Type.Optional(Type.Number({ description: "Window size ms; default 50" })),
+      sampleRate: Type.Optional(Type.Number({ description: "Decode sample rate; default 48000" })),
+      fromMs: Type.Optional(Type.Number({ description: "Window start ms (inclusive); default 0" })),
+      toMs: Type.Optional(Type.Number({ description: "Window end ms (exclusive); omit = end of media" })),
+    }),
+    run: analyzeWaveform,
+  },
+  {
+    path: ["analyze", "silence"],
+    family: "analyze",
+    summary: "silence ranges from waveform JSON → JSON",
+    description:
+      "Analyze: read analyze.waveform JSON, emit silence ranges. " +
+      "CLI: `uvid analyze silence [-i WAVEFORM.json] [-o JSON] [--min-ms 300] [--threshold-db -40] [--pad-ms 0] [--from-ms 0] [--to-ms N] [--max-ranges N]`. " +
+      "Pipe: `uvid analyze waveform -i a.mp4 | uvid analyze silence -o silence.json`.",
+    consumes: ["analyze.waveform JSON"],
+    produces: ["analyze.silence JSON"],
+    params: Type.Object({
+      ...ioParams,
+      minMs: Type.Optional(Type.Number({ description: "Min silence duration ms; default 300" })),
+      thresholdDb: Type.Optional(Type.Number({ description: "RMS dB threshold; default -40" })),
+      padMs: Type.Optional(Type.Number({ description: "Expand each range by N ms on both sides; default 0" })),
+      fromMs: Type.Optional(Type.Number({ description: "Only ranges overlapping from this ms" })),
+      toMs: Type.Optional(Type.Number({ description: "Only ranges overlapping before this ms (exclusive)" })),
+      maxRanges: Type.Optional(Type.Number({ description: "Keep at most N ranges (longest first)" })),
+    }),
+    run: analyzeSilence,
+  },
+  {
+    path: ["analyze", "frame-diff"],
+    family: "analyze",
+    summary: "video frame change points (MAE) → JSON only",
+    description:
+      "Analyze: low-fps grayscale MAE change points. Does not extract stills. " +
+      "Optional half-open window; points[].timeMs stay absolute. " +
+      "CLI: `uvid analyze frame-diff [-i VIDEO] [-o JSON] [--from-ms 0] [--to-ms N] [--fps 5] [--width 320] [--height H] [--min-score S] [--max-points 40] [--merge-ms M]`. " +
+      "Stills: call `uvid generate frame` once per timeMs.",
+    consumes: ["video"],
+    produces: ["analyze.frame-diff JSON"],
+    params: Type.Object({
+      ...ioParams,
+      fps: Type.Optional(Type.Number({ description: "Sample fps; default 5" })),
+      width: Type.Optional(Type.Number({ description: "Downscale width; default 320" })),
+      height: Type.Optional(Type.Number({ description: "Downscale height; default width*9/16" })),
+      fromMs: Type.Optional(Type.Number({ description: "Window start ms (inclusive); default 0" })),
+      toMs: Type.Optional(Type.Number({ description: "Window end ms (exclusive); omit = end of media" })),
+      minScore: Type.Optional(
+        Type.Number({ description: "Raise detection floor (0–1); adaptive thr = max(adaptive, minScore)" }),
+      ),
+      maxPoints: Type.Optional(Type.Number({ description: "Max points kept (by score); default 40" })),
+      mergeMs: Type.Optional(
+        Type.Number({ description: "Merge points closer than this ms; default ≈ 2 sample intervals" }),
+      ),
+    }),
+    run: analyzeFrameDiff,
+  },
+
+  // ── generate ──────────────────────────────────────────────────────────
+  {
+    path: ["generate", "normalize"],
+    family: "generate",
+    summary: "two-pass loudnorm → one media file (default audio: mp3)",
+    description:
+      "Generate: linear loudnorm. Default audio format is mp3 (smaller intermediates). " +
+      "`-f mp3|wav|aac` forces audio-only; `-f mp4` keeps video stream-copy + aac. " +
+      "Format also inferred from -o extension. Optional trim window. " +
+      "CLI: `uvid generate normalize [-i IN] [-o OUT] [-f mp3] --lufs N --tp N --lra N [--bitrate 192k] [--sample-rate 48000] [--from-ms 0] [--to-ms N]`.",
     consumes: ["media (raw)"],
     produces: ["media (normalized)"],
     params: Type.Object({
-      input: Type.String({ description: "Input audio/video file" }),
-      output: Type.String({ description: "Output audio/video file" }),
+      ...ioParams,
+      format: Type.Optional(
+        Type.String({ description: "Output format: mp3 (default) | wav | aac | mp4; also from -o ext" }),
+      ),
       lufs: Type.Number({ description: "Integrated loudness target LUFS, e.g. -16" }),
       tp: Type.Number({ description: "True peak target dBTP, e.g. -1.5" }),
       lra: Type.Number({ description: "Loudness range target, e.g. 11" }),
+      bitrate: Type.Optional(Type.String({ description: "Lossy audio bitrate, e.g. 192k; default 192k" })),
+      sampleRate: Type.Optional(Type.Number({ description: "Output sample rate Hz; default 48000" })),
+      fromMs: Type.Optional(Type.Number({ description: "Trim start ms (inclusive); default 0" })),
+      toMs: Type.Optional(Type.Number({ description: "Trim end ms (exclusive); omit = end of media" })),
     }),
-    run: audioCreateLoudness,
+    run: generateNormalize,
   },
   {
-    path: ["prep", "waveform"],
-    summary: "windowed RMS/peak waveform report for one source",
+    path: ["generate", "frame"],
+    family: "generate",
+    summary: "extract one still JPEG at atMs",
     description:
-      "Prep/analysis helper: windowed RMS/peak waveform JSON. Prefer -o (inline can be huge). " +
-      "CLI: `uvid prep waveform -i INPUT [-o OUTPUT] [--window-ms 50] [--sample-rate 48000]`.",
-    consumes: ["media"],
-    produces: ["waveform.json"],
+      "Generate: single frame at --at-ms. One invocation = one image. " +
+      "CLI: `uvid generate frame -i VIDEO -o still.jpg --at-ms 21600 [--width 640] [--height H] [--quality 3]`. " +
+      "Requires -i file path (no video stdin).",
+    consumes: ["video"],
+    produces: ["one JPEG"],
     params: Type.Object({
-      input: Type.String({ description: "Input audio/video file" }),
-      output: Type.Optional(Type.String({ description: "Output JSON file; strongly recommended" })),
-      windowMs: Type.Optional(Type.Number({ description: "Analysis window size in milliseconds; default 50" })),
-      sampleRate: Type.Optional(Type.Number({ description: "Decode sample rate; default 48000" })),
+      ...ioParams,
+      atMs: Type.Number({ description: "Source timeline time in milliseconds" }),
+      width: Type.Optional(Type.Number({ description: "JPEG width; default 640" })),
+      height: Type.Optional(Type.Number({ description: "JPEG height; omit keeps aspect" })),
+      quality: Type.Optional(Type.Number({ description: "JPEG -q:v 1–31 (lower=better); default 3" })),
     }),
-    run: audioGetWaveform,
-  },
-
-  // ── draft ─────────────────────────────────────────────────────────────
-  {
-    path: ["draft", "survey"],
-    summary: "pre-draft reports from script+clips+asr (no draft.json needed)",
-    description:
-      "Before writing draft.json: parse script media list, load ASR, measure silence/energy per sentence, " +
-      "and for kind=video extract frames at speech end / +0.5s / +1s / +2s into original-size contact sheets. " +
-      "AI uses these reports to write ranges (video out follows picture, not only speech end). " +
-      "CLI: `uvid draft survey --script script.md --clips-dir clips --asr-dir .uvid-cache/asr -o .uvid-cache/draft-survey`.",
-    consumes: ["script.md", "media (normalized)", "asr.json"],
-    produces: ["survey reports", "survey contact sheets"],
-    params: Type.Object({
-      script: Type.String({ description: "script.md path" }),
-      clipsDir: Type.String({ description: "Normalized clips directory" }),
-      asrDir: Type.String({ description: "ASR json directory" }),
-      output: Type.String({ description: "Output survey directory" }),
-      source: Type.Optional(Type.String({ description: "Only one source id" })),
-    }),
-    run: draftSurvey,
+    run: generateFrame,
   },
   {
-    path: ["draft", "init"],
-    summary: "generate draft.json skeleton from script+clips+asr (decisions left empty)",
+    path: ["generate", "timeline"],
+    family: "generate",
+    summary: "edit.json → timeline.json (basis=aroll | program)",
     description:
-      "Draft decide helper: build the draft.json boilerplate so the editor only writes decisions. " +
-      "Fills sources[] (path/asr/kind/durationMs) and entries[] verbatim from ASR; ranges[] stay empty. " +
-      "Refuses to overwrite without --force. " +
-      "CLI: `uvid draft init --script script.md --clips-dir clips --asr-dir .uvid-cache/asr -o draft.json`.",
-    consumes: ["script.md", "media (normalized)", "asr.json"],
-    produces: ["draft.json (skeleton, decisions empty)"],
-    params: Type.Object({
-      script: Type.String({ description: "script.md path" }),
-      clipsDir: Type.String({ description: "Normalized clips directory" }),
-      asrDir: Type.String({ description: "ASR json directory" }),
-      output: Type.String({ description: "Output draft.json path" }),
-      force: Type.Optional(Type.Boolean({ description: "Overwrite existing draft.json" })),
-    }),
-    run: draftInit,
-  },
-  {
-    path: ["draft", "evidence"],
-    summary: "visual continuity evidence for kind=video ranges/splices",
-    description:
-      "Draft evidence: scene-detect around range outs, extract original-size frames, build contact sheets. " +
-      "Does not modify draft.json. CLI: `uvid draft evidence --draft draft.json -o .uvid-cache/draft-evidence`.",
-    consumes: ["draft.json (with ranges)", "media (normalized)"],
-    produces: ["evidence reports", "evidence contact sheets"],
-    params: Type.Object({
-      draft: Type.String({ description: "draft.json path" }),
-      output: Type.String({ description: "Output evidence directory" }),
-      source: Type.Optional(Type.String({ description: "Only analyze one source id; default: all kind=video" })),
-      preMs: Type.Optional(Type.Number({ description: "Look back before candidate out in ms; default 500" })),
-      postMs: Type.Optional(Type.Number({ description: "Look ahead after candidate out in ms; default 4000" })),
-      settleMs: Type.Optional(Type.Number({ description: "Settle buffer after last visual change in ms; default 400" })),
-      sceneThreshold: Type.Optional(Type.Number({ description: "ffmpeg scene threshold; default 0.0001" })),
-      contactSheets: Type.Optional(Type.Boolean({ description: "Generate original-size montage contact sheets; default true" })),
-    }),
-    run: draftEvidence,
-  },
-  {
-    path: ["draft", "cutpoints"],
-    summary: "audio cut-point evidence for draft ranges/ASR boundaries",
-    description:
-      "Draft evidence: energy/silence/zero-crossing reports around draft boundaries. " +
-      "Writes waveform-<id>.json. CLI: `uvid draft cutpoints --draft FILE (--source ID | --all) -o DIR`.",
-    consumes: ["draft.json (with ranges)", "media (normalized)"],
-    produces: ["cutpoint reports"],
-    params: Type.Object({
-      draft: Type.String({ description: "draft.json path" }),
-      output: Type.String({ description: "Output directory for waveform-<id>.json reports" }),
-      source: Type.Optional(Type.String({ description: "Analyze one source id, e.g. 01" })),
-      all: Type.Optional(Type.Boolean({ description: "Analyze all sources" })),
-    }),
-    run: audioGetCutpoints,
-  },
-  {
-    path: ["draft", "premix"],
-    summary: "render A-roll premix WAV for one source from draft ranges",
-    description:
-      "Draft apply: trim/join ranges with declared smoothing; mono 48kHz WAV. " +
-      "CLI: `uvid draft premix --draft FILE --source ID -o clips/src-ID.wav`.",
-    consumes: ["draft.json (with ranges)", "media (normalized)"],
-    produces: ["premix.wav"],
-    params: Type.Object({
-      draft: Type.String({ description: "draft.json path" }),
-      source: Type.String({ description: "Source id, e.g. 01" }),
-      output: Type.String({ description: "Output WAV file" }),
-    }),
-    run: audioCreatePremix,
-  },
-  {
-    path: ["draft", "splices"],
-    summary: "post-premix splice hardness analysis",
-    description:
-      "Draft apply check: hardnessScore on premix joins. " +
-      "CLI: `uvid draft splices -i PREMIX.wav --draft FILE --source ID [-o REPORT.json]`.",
-    consumes: ["premix.wav", "draft.json (with ranges)"],
-    produces: ["splices.json"],
-    params: Type.Object({
-      input: Type.String({ description: "Rendered premix WAV" }),
-      draft: Type.String({ description: "draft.json path" }),
-      source: Type.String({ description: "Source id, e.g. 01" }),
-      output: Type.Optional(Type.String({ description: "Output JSON report; inline when omitted" })),
-    }),
-    run: audioGetSplices,
-  },
-  {
-    path: ["draft", "subtitles"],
-    summary: "derive sources[].subtitles from kept entries + ranges",
-    description:
-      "Draft apply: write source-local subtitles into draft.json. " +
-      "CLI: `uvid draft subtitles -i draft.json [--source ID] [--dry-run]`.",
-    consumes: ["draft.json (with ranges)"],
-    produces: ["draft.json (subtitles derived)"],
-    params: Type.Object({
-      input: Type.String({ description: "draft.json path" }),
-      source: Type.Optional(Type.String({ description: "One source id only; default: all" })),
-      dryRun: Type.Optional(Type.Boolean({ description: "Report without writing; CLI: --dry-run" })),
-    }),
-    run: draftSubtitles,
-  },
-  {
-    path: ["draft", "validate"],
-    summary: "validate draft.json structure and semantics",
-    description:
-      "Draft gate: schema/semantic checks; --strict treats warnings as failures. " +
-      "CLI: `uvid draft validate -i draft.json [--no-check-files] [--strict]`.",
-    consumes: ["draft.json"],
-    produces: ["findings (log)"],
-    params: Type.Object({
-      input: Type.String({ description: "draft.json path" }),
-      checkFiles: Type.Optional(
-        Type.Boolean({
-          description: "Require sources[].path and sources[].asr on disk; CLI: --no-check-files to skip",
-        }),
-      ),
-      strict: Type.Optional(Type.Boolean({ description: "Treat warnings as failures; CLI: --strict" })),
-    }),
-    run: draftValidate,
-  },
-  {
-    path: ["draft", "check"],
-    summary: "one-shot apply gate: normalize + validate + premix + splices + subtitles",
-    description:
-      "Draft apply in one call: auto-fill derived range fields (durationMs/sourceLocal*), strict-validate, " +
-      "premix every targeted source to <voiceDir>/src-NN.wav, analyze splice hardness, derive subtitles, and write " +
-      "one summary.json with an actionNeeded list. Fails when anything needs attention. " +
-      "Use --source NN for incremental re-check after a fix; --evidence adds video contact sheets. " +
-      "CLI: `uvid draft check --draft draft.json --voice-dir clips -o .uvid-cache/draft-check [--source ID] [--evidence]`.",
-    consumes: ["draft.json (with decisions)", "media (normalized)"],
-    produces: ["premix.wav", "splices.json", "draft.json (subtitles derived)", "check summary.json"],
-    params: Type.Object({
-      draft: Type.String({ description: "draft.json path" }),
-      output: Type.String({ description: "Output directory for summary.json and splice reports" }),
-      voiceDir: Type.String({ description: "Directory to write premix WAVs as src-<id>.wav" }),
-      source: Type.Optional(Type.String({ description: "Re-check one source id only" })),
-      evidence: Type.Optional(Type.Boolean({ description: "Also run visual evidence for kind=video sources; slower" })),
-      hardThreshold: Type.Optional(Type.Number({ description: "hardnessScore needing action; default 15" })),
-    }),
-    run: draftCheck,
-  },
-
-  // ── finish ────────────────────────────────────────────────────────────
-  {
-    path: ["finish", "plan"],
-    summary: "list TOC/scene assets finish timeline will require (from script.md)",
-    description:
-      "Finish dry-run: parse script.md and print the exact scene order, TOC ids, and " +
-      "required clip/voice/still filenames before you create or render anything. " +
-      "TOC id = toc-{chapterIndex} where chapterIndex is 1-based order of media-bearing " +
-      "--- blocks with an H2 (not H3; not free-form names). " +
-      "Optional clipsDir/voiceDir/scenesDir report which files already exist. " +
-      "CLI: `uvid finish plan --script script.md [-o plan.json] [--clips-dir DIR]`. " +
-      "Call this before `finish scene` for toc / before `finish timeline`.",
-    consumes: ["script.md"],
-    produces: ["finish.plan.json (or log)"],
-    params: Type.Object({
-      script: Type.String({ description: "script.md path" }),
-      output: Type.Optional(Type.String({ description: "Write plan JSON path; omit to print" })),
-      clipsDir: Type.Optional(Type.String({ description: "Check existence of intro/toc/outro mp4" })),
-      voiceDir: Type.Optional(Type.String({ description: "Check existence of src-NN.wav" })),
-      scenesDir: Type.Optional(Type.String({ description: "Check existence of screen-NN-01.png; default clipsDir" })),
-      draft: Type.Optional(Type.String({ description: "Reserved; draft path for future cross-checks" })),
-    }),
-    run: timelinePlan,
-  },
-  {
-    path: ["finish", "scene"],
-    summary: "create a HyperFrames scene project (intro/toc/markdown/outro/dialog)",
-    description:
-      "Finish: create renderable scene dir from templates. " +
-      "CLI: `uvid finish scene --type TYPE -o DIR [flags]`.",
-    consumes: ["markdown (type=markdown)", "package templates/assets"],
-    produces: ["scene project dir (renderable)"],
-    params: Type.Object({
-      type: Type.String({ description: "Scene type: dialog, intro, outro, toc, or markdown" }),
-      output: Type.String({ description: "Output scene/project directory" }),
-      theme: Type.Optional(Type.String({ description: "Theme name; required for current types" })),
-      input: Type.Optional(Type.String({ description: "Markdown path or '-' ; required for type=markdown" })),
-      avatar: Type.Optional(Type.String({ description: "Avatar image; required for type=outro" })),
-      speakerSprite: Type.Optional(Type.String({ description: "Speaker sprite JS; required for type=dialog" })),
-      fps: Type.Optional(Type.Number({ description: "FPS for type=dialog; default 25" })),
-      watermark: Type.Optional(Type.String({ description: "Optional watermark text" })),
-      id: Type.Optional(Type.String({ description: "Composition id; required for type=toc" })),
-      duration: Type.Optional(Type.Number({ description: "Seconds; required for type=toc" })),
-      chaptersJson: Type.Optional(Type.String({ description: "JSON array of chapter titles for toc" })),
-      chaptersFile: Type.Optional(Type.String({ description: "Path to JSON chapter titles for toc" })),
-      currentIndex: Type.Optional(Type.Number({ description: "0-based current chapter index for toc" })),
-      previousIndex: Type.Optional(Type.Number({ description: "0-based previous chapter index for toc" })),
-    }),
-    run: sceneCreate,
-  },
-  {
-    path: ["finish", "dialog"],
-    summary: "render four RPG dialog-box state PNGs",
-    description:
-      "Finish: rpg-open/closed × arrow/noarrow PNGs. " +
-      "CLI: `uvid finish dialog -o DIR --theme THEME --speaker-sprite FILE [--fps 25]`.",
-    consumes: ["speaker sprite js", "package templates"],
-    produces: ["rpg dialog PNGs ×4"],
-    params: Type.Object({
-      output: Type.String({ description: "Output directory for the four PNGs" }),
-      theme: Type.String({ description: "Theme name, e.g. onedark" }),
-      speakerSprite: Type.String({ description: "Speaker sprite data JS file" }),
-      fps: Type.Optional(Type.Number({ description: "Frames per second; default 25" })),
-    }),
-    run: imageCreateDialog,
-  },
-  {
-    path: ["finish", "timeline"],
-    summary: "create main timeline.json from script + draft + assets",
-    description:
-      "Finish: single time base from script + draft + rendered assets. " +
-      "Expects clips/intro.mp4, clips/toc-NN.mp4 (one per H2 media chapter; NN = chapter index), " +
-      "clips/outro.mp4, and voiceDir/src-NN.wav. Missing clips fail with the full expected list. " +
-      "Prefer `uvid finish plan` first to learn TOC ids. " +
-      "CLI: `uvid finish timeline --script FILE --draft FILE --clips-dir DIR --scenes-dir DIR --voice-dir DIR -o FILE`.",
-    consumes: ["script.md", "draft.json (locked)", "scene clips", "scene stills", "premix.wav", "bgm.mp3 (optional)"],
+      "Compile sparse edit intent into one uvid.timeline JSON. Two products: " +
+      "(1) basis=aroll — body segments + captions only; " +
+      "(2) basis=program — body + intro/toc/outro media + dialog[] state sequence. " +
+      "Packaging is applied here, not in generate video: --intro / --outro / --toc are explicit media paths (duration probed). " +
+      "TOC: --toc-before ID,ID must pair with equal-length --toc path,path (no black placeholders). " +
+      "BGM: --bgm path binds audio bed into timeline.bgm with window intro-end→outro-start (body+TOC only). " +
+      "Dialog sprites: --dialog DIR binds timeline.dialogSprites (idle/talk-*/wait-on.png). " +
+      "ASS look: --fg/--bg/--font/--font-size → timeline.captionsStyle (burned by generate video). " +
+      "Program dialog[] schedules idle/talk-*/wait-on/hidden from caption turns (mouth word-timed; continuous speech keeps box; long mute → idle; packaging → hidden). " +
+      "Does not scan cache/ or invent default packaging files. " +
+      "CLI aroll: `uvid generate timeline -i edit.json -o timeline.aroll.json`. " +
+      "CLI program: `uvid generate timeline -i edit.json -o timeline.program.json --intro clips/intro.mp4 --outro clips/outro.mp4 --toc-before 02,03,04 --toc clips/toc1.mp4,clips/toc2.mp4,clips/toc3.mp4 --dialog clips/dialog --bgm clips/bgm.mp3 --fg '#abb2bf' --bg '#282c34'`. " +
+      "Pipe: `cat edit.json | uvid generate timeline -o timeline.json`.",
+    consumes: ["edit.json"],
     produces: ["timeline.json"],
     params: Type.Object({
-      script: Type.String({ description: "script.md path" }),
-      draft: Type.String({ description: "draft.json path" }),
-      clipsDir: Type.String({ description: "Dir with intro/toc/outro mp4 etc." }),
-      scenesDir: Type.String({ description: "Dir with screen-NN-01.png" }),
-      voiceDir: Type.String({ description: "Dir with src-NN.wav" }),
-      output: Type.String({ description: "Output timeline JSON" }),
-      introSfx: Type.Optional(Type.String({ description: "Optional intro SFX" })),
-      introSfxOffset: Type.Optional(Type.Number({ description: "Intro SFX offset seconds" })),
-      tocSfx: Type.Optional(Type.String({ description: "Optional TOC SFX" })),
-      outroSfx: Type.Optional(Type.String({ description: "Optional outro SFX" })),
-      bgm: Type.Optional(Type.String({ description: "Optional BGM file" })),
-      dialogOpenArrow: Type.Optional(Type.String({ description: "RPG open+arrow PNG" })),
-      dialogClosedArrow: Type.Optional(Type.String({ description: "RPG closed+arrow PNG" })),
-      dialogOpenNoarrow: Type.Optional(Type.String({ description: "RPG open+noarrow PNG" })),
-      dialogClosedNoarrow: Type.Optional(Type.String({ description: "RPG closed+noarrow PNG" })),
+      ...ioParams,
+      intro: Type.Optional(
+        Type.String({
+          description:
+            "Intro media path (episode-relative or absolute). Duration/audio probed from file; no default path",
+        }),
+      ),
+      outro: Type.Optional(
+        Type.String({
+          description:
+            "Outro media path (episode-relative or absolute). Duration/audio probed from file; no default path",
+        }),
+      ),
+      tocBefore: Type.Optional(
+        Type.String({
+          description:
+            "Comma-separated source ids before which to insert TOC clips; must pair with equal-length --toc",
+        }),
+      ),
+      toc: Type.Optional(
+        Type.String({
+          description:
+            "Comma-separated TOC media paths (equal length with --toc-before). Duration/audio probed; required when --toc-before set",
+        }),
+      ),
+      tocTitles: Type.Optional(
+        Type.String({ description: "Optional comma-separated titles aligned with --toc-before" }),
+      ),
+      bgm: Type.Optional(
+        Type.String({
+          description:
+            "BGM audio path (episode-relative or absolute). Bound into timeline.bgm with startMs/endMs = intro end → outro start; mixed by generate video",
+        }),
+      ),
+      dialog: Type.Optional(
+        Type.String({
+          description:
+            "Dialog sprite directory (idle/talk-closed/talk-open/wait-on.png). Bound into timeline.dialogSprites",
+        }),
+      ),
+      fg: Type.Optional(Type.String({ description: "ASS revealed fill #RRGGBB → timeline.captionsStyle.fg" })),
+      bg: Type.Optional(Type.String({ description: "ASS panel reference #RRGGBB → timeline.captionsStyle.bg" })),
+      font: Type.Optional(Type.String({ description: "ASS Fontname → timeline.captionsStyle.font" })),
+      fontSize: Type.Optional(Type.Number({ description: "ASS Fontsize → timeline.captionsStyle.fontSize" })),
+      minAudioShardMs: Type.Optional(
+        Type.Number({ description: "Discard audio shards shorter than this; default 120" }),
+      ),
+      fadeMs: Type.Optional(Type.Number({ description: "Default edge afade ms; default 16" })),
+      highRiskGapMs: Type.Optional(
+        Type.Number({ description: "Collapsed source gap ≥ this → high-risk fade; default 1000" }),
+      ),
+      highRiskFadeMs: Type.Optional(Type.Number({ description: "High-risk edge afade ms; default 32" })),
+      nearEndSnapMs: Type.Optional(
+        Type.Number({ description: "Range drop ending within this of media end snaps to end; default 500" }),
+      ),
     }),
-    run: timelineCreateMain,
+    run: generateTimeline,
   },
   {
-    path: ["finish", "subtitle"],
-    summary: "create typewriter ASS from timeline + draft",
+    path: ["generate", "video"],
+    family: "generate",
+    summary: "timeline.json → one episode mp4 (A-roll or final program)",
     description:
-      "Finish: RPG-style ASS. " +
-      "CLI: `uvid finish subtitle -i TIMELINE -o ASS --font NAME --font-size N --color HEX --outline-color HEX --pos X,Y`.",
+      "Render one combined mp4 from timeline.json only. All product assets are already bound on the timeline: " +
+      "segments (incl. packaging), dialog[], dialogSprites, bgm, captionsStyle. " +
+      "basis=aroll → body A-roll. basis=program → base + dialog overlay + ASS burn-in + BGM mix. " +
+      "This command accepts only render presets (quality/fps/size) — no side asset paths. " +
+      "Still/markdown segments take audio from media, picture from visual. Unified yuv420p/bt709. " +
+      "CLI: `uvid generate video -i timeline.program.json -o program-final.mp4 [--quality draft]`. " +
+      "Boundary: generate render remains scene-dir → single media; this command assembles the episode.",
     consumes: ["timeline.json"],
-    produces: ["subtitles.ass"],
+    produces: ["episode.mp4"],
     params: Type.Object({
-      input: Type.String({ description: "timeline.json path" }),
-      output: Type.String({ description: "Output ASS path" }),
-      font: Type.String({ description: "Font name" }),
-      fontSize: Type.Number({ description: "Font size" }),
-      color: Type.String({ description: "ASS primary colour" }),
-      outlineColor: Type.String({ description: "ASS outline colour" }),
-      pos: Type.String({ description: "ASS position x,y" }),
-      backColor: Type.Optional(Type.String({ description: "ASS back colour; default &H80000000" })),
-      bold: Type.Optional(Type.Boolean({ description: "Bold; default true" })),
-      outline: Type.Optional(Type.Number({ description: "Outline px; default 2" })),
-      shadow: Type.Optional(Type.Number({ description: "Shadow px; default 2" })),
+      ...ioParams,
+      quality: Type.Optional(
+        Type.String({ description: "draft (default) | standard | high" }),
+      ),
+      fps: Type.Optional(Type.Number({ description: "Output fps; default 25" })),
+      width: Type.Optional(Type.Number({ description: "Output width; default 1280" })),
+      height: Type.Optional(Type.Number({ description: "Output height; default 720" })),
     }),
-    run: subtitleCreateAss,
+    run: generateVideo,
   },
   {
-    path: ["finish", "bgm"],
-    summary: "create fixed-loudness chiptune BGM from MML",
+    path: ["generate", "captions"],
+    family: "generate",
+    summary: "timeline.json → subtitles on program axis (srt / ass typewriter)",
     description:
-      "Finish: MML → FamiStudio → MP3 at I=-42 LUFS, TP=-9, LRA=11. " +
-      "CLI: `uvid finish bgm -i bgm.mml -o clips/bgm.mp3 [--duration SEC]`.",
-    consumes: ["bgm.mml"],
-    produces: ["bgm.mp3"],
+      "Export subtitles from timeline.captions[] on the compiled program axis (not raw ASR). " +
+      "srt = turn-level preview. ass typewriter (default when words exist) = karaoke \\k, 1 event/turn, " +
+      "transparent Secondary so unrevealed glyphs do not paint. " +
+      "Style knobs: --fg / --bg / --font / --font-size (defaults from everforest + themes.css --font-body). " +
+      "--style plain = full line (no karaoke). " +
+      "CLI: `uvid generate captions -i timeline.json -o out.ass [--fg #d3c6aa --bg #272e33 --font 'Fusion Pixel 12px M zh_hans']`.",
+    consumes: ["timeline.json"],
+    produces: ["captions.srt|ass"],
     params: Type.Object({
-      input: Type.String({ description: "Input MML file" }),
-      output: Type.String({ description: "Output MP3" }),
-      duration: Type.Optional(Type.Number({ description: "Export duration seconds" })),
-      rate: Type.Optional(Type.Number({ description: "Sample rate 44100 or 48000; default 48000" })),
-      bitrate: Type.Optional(Type.Number({ description: "MP3 kbps; default 192" })),
-      textOutput: Type.Optional(Type.String({ description: "Optional FamiStudio text path" })),
+      ...ioParams,
+      format: Type.Optional(Type.String({ description: "srt (default) | ass; also inferred from -o extension" })),
+      style: Type.Optional(
+        Type.String({
+          description:
+            "ASS only: typewriter (default; karaoke \\k) | plain. Aliases: karaoke, rpg → typewriter",
+        }),
+      ),
+      fg: Type.Optional(
+        Type.String({ description: "Revealed text fill #RRGGBB; default everforest --fg #d3c6aa" }),
+      ),
+      bg: Type.Optional(
+        Type.String({
+          description:
+            "Panel reference #RRGGBB; default everforest --bg #272e33 (alignment/docs; typewriter unrevealed is transparent)",
+        }),
+      ),
+      font: Type.Optional(
+        Type.String({
+          description:
+            'ASS Fontname; default themes.css --font-body "Fusion Pixel 12px M zh_hans" (must be installed)',
+        }),
+      ),
+      fontSize: Type.Optional(
+        Type.Number({ description: "ASS Fontsize at 1280x720; default 36 typewriter / 42 plain" }),
+      ),
     }),
-    run: audioCreateBgm,
+    run: generateCaptions,
   },
-
-  // ── deliver ───────────────────────────────────────────────────────────
   {
-    path: ["deliver", "otio"],
-    summary: "export OpenTimelineIO from timeline.json",
+    path: ["generate", "otio"],
+    family: "generate",
+    summary: "timeline.json → one OpenTimelineIO JSON (.otio)",
     description:
-      "Deliver: OTIO for Kdenlive/OTIO tools. CLI: `uvid deliver otio -i timeline.json -o timeline.otio`.",
+      "NLE interchange export from timeline.json only (same assets as generate video). " +
+      "Tracks: V1 Program, V2_DIALOG (dialog[] needles; hidden=gap), A1_VOICE, A3_BGM (timeline.bgm windowed intro-end→outro-start). " +
+      "Captions become markers on Program with captionsStyle metadata. " +
+      "CLI: `uvid generate otio -i timeline.program.json -o out.otio [--fps 25] [--name episode]`.",
     consumes: ["timeline.json"],
     produces: ["timeline.otio"],
     params: Type.Object({
-      input: Type.String({ description: "Input timeline JSON" }),
-      output: Type.String({ description: "Output OTIO file" }),
+      ...ioParams,
+      name: Type.Optional(Type.String({ description: "Timeline name inside OTIO" })),
+      fps: Type.Optional(Type.Number({ description: "OTIO rate; default 25" })),
     }),
-    run: timelineCreateOtio,
+    run: generateOtio,
   },
   {
-    path: ["deliver", "render"],
-    summary: "render final MP4 from timeline.json",
+    path: ["generate", "edit"],
+    family: "generate",
+    summary: "ASR JSON(s) → upsert source(s) into edit.json (empty actions)",
     description:
-      "Deliver: V1 + dialog overlay + audio mix + optional ASS burn-in. " +
-      "CLI: `uvid deliver render -i timeline.json -o final.mp4 [--subtitles subtitles.ass]`.",
-    consumes: ["timeline.json", "subtitles.ass (optional)"],
-    produces: ["final.mp4"],
+      "Generate: read ASR JSON path(s), assign stable turn/word ids, upsert into edit.json (-o). " +
+      "Parallel multi-args must be equal length: -i / --id / --type / --media (optional --visual). " +
+      "Comma-separated or repeated flags. Visual slot '-' means none. " +
+      "No script.md parse, no cache layout scan. Does not invent cuts. " +
+      "Re-run preserves each source's actions and other sources. Schema: schemas/edit.schema.json. " +
+      "CLI: `uvid generate edit -i a.json,b.json -o edit.json --id 01,02 --type audio,video --media a.mp3,b.mp4`. " +
+      "Or single: `… -i a.json --id 01 --type audio --media a.mp3 --visual a.png`.",
+    consumes: ["asr.json (+ explicit media paths)"],
+    produces: ["edit.json (upsert source(s))"],
     params: Type.Object({
-      input: Type.String({ description: "timeline.json path" }),
-      output: Type.String({ description: "Output MP4" }),
-      subtitles: Type.Optional(Type.String({ description: "Optional ASS to burn in" })),
-      workDir: Type.Optional(Type.String({ description: "Intermediate work directory" })),
-      width: Type.Optional(Type.Number({ description: "Width; default 1280" })),
-      height: Type.Optional(Type.Number({ description: "Height; default 720" })),
-      crf: Type.Optional(Type.Number({ description: "x264 CRF; default 18" })),
-      preset: Type.Optional(Type.String({ description: "x264 preset; default veryfast" })),
-      audioBitrate: Type.Optional(Type.String({ description: "AAC bitrate; default 192k" })),
-      keepWork: Type.Optional(Type.Boolean({ description: "Keep intermediates; default false" })),
+      input: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "ASR JSON path(s); equal length with --id/--type/--media (comma or repeated)",
+        }),
+      ),
+      output: Type.Optional(
+        Type.String({
+          description:
+            "edit.json path; when set, file is written and stdout prints absolute path (omit → JSON on stdout)",
+        }),
+      ),
+      id: Type.Array(Type.String(), {
+        description: "Source id(s), e.g. 01 or 01,02",
+      }),
+      type: Type.Array(Type.String(), {
+        description: "audio|video per source; equal length with --id",
+      }),
+      media: Type.Array(Type.String(), {
+        description: "Media path(s) stored on sources; equal length with --id",
+      }),
+      visual: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "Optional still path(s); equal length if set; use - for none",
+        }),
+      ),
+      script: Type.Optional(
+        Type.String({ description: "Optional script path metadata when creating a new edit file" }),
+      ),
+      title: Type.Optional(
+        Type.String({ description: "Optional title when creating a new edit file" }),
+      ),
+      status: Type.Optional(
+        Type.String({
+          description:
+            "Initial status for new files: subtitle-draft (default) | audio-reviewed | video-reviewed | ready",
+        }),
+      ),
     }),
-    run: videoRenderFinal,
+    run: generateEdit,
+  },
+  {
+    path: ["generate", "bgm"],
+    family: "generate",
+    summary: "bgm.mml → one chiptune audio file (default mp3)",
+    description:
+      "Generate: NES-style MML → FamiStudio → loudnorm bed. " +
+      "Pass --duration SEC when the bed must cover a known window (caller computes length). " +
+      "CLI: `uvid generate bgm [-i bgm.mml] [-o bgm.mp3] [--duration SEC] [-f mp3] [--sample-rate 48000] [--bitrate 192]`.",
+    consumes: ["bgm.mml"],
+    produces: ["bgm audio (mp3|wav|aac)"],
+    params: Type.Object({
+      ...ioParams,
+      duration: Type.Optional(
+        Type.Number({ description: "Export length seconds (FamiStudio); omit = full song loop length" }),
+      ),
+      sampleRate: Type.Optional(Type.Number({ description: "44100 or 48000; default 48000" })),
+      bitrate: Type.Optional(Type.Number({ description: "FamiStudio/final kbps; default 192" })),
+      format: Type.Optional(
+        Type.String({ description: "Output format: mp3 (default) | wav | aac; also from -o ext" }),
+      ),
+      lufs: Type.Optional(Type.Number({ description: "Bed loudness LUFS; default -42" })),
+      tp: Type.Optional(Type.Number({ description: "True peak dBTP; default -9" })),
+      lra: Type.Optional(Type.Number({ description: "Loudness range; default 11" })),
+    }),
+    run: generateBgm,
+  },
+  {
+    path: ["generate", "scene"],
+    family: "generate",
+    summary: "one HyperFrames scene project dir (intro|outro|toc|markdown|dialog)",
+    description:
+      "Generate: package templates → one renderable HyperFrames scene directory. " +
+      "Types: intro, outro, toc, markdown, dialog. " +
+      "Main product is a directory (-o required); stdout prints that absolute path. " +
+      "Multiple scenes = multiple invocations (shell loop), not one multi-dir command. " +
+      "TOC short form: `uvid generate scene --type toc --theme onedark --chapters 'a,b,c' --current 1 -o scenes/toc-ch2`. " +
+      "CLI: `uvid generate scene --type intro --theme onedark -o scenes/intro`.",
+    consumes: ["markdown (type=markdown)", "package templates/assets"],
+    produces: ["one scene project directory"],
+    params: Type.Object({
+      type: Type.String({
+        description: "Scene type: intro | outro | toc | markdown | dialog",
+      }),
+      output: Type.String({ description: "Output scene project directory (required)" }),
+      theme: Type.Optional(Type.String({ description: "Theme name; required for current types" })),
+      input: Type.Optional(
+        Type.String({ description: "Markdown file; required for type=markdown (or stdin)" }),
+      ),
+      avatar: Type.Optional(Type.String({ description: "Avatar image; required for type=outro" })),
+      speakerSprite: Type.Optional(
+        Type.String({
+          description:
+            "Speaker sprite .json path for type=dialog. Default: template assets/speaker-sprite.json",
+        }),
+      ),
+      fps: Type.Optional(Type.Number({ description: "FPS for type=dialog; default 25" })),
+      watermark: Type.Optional(Type.String({ description: "Optional watermark text" })),
+      id: Type.Optional(Type.String({ description: "Composition id; toc defaults to basename(-o)" })),
+      duration: Type.Optional(
+        Type.Number({
+          description:
+            "Seconds for type=markdown only (default 4). TOC/intro/outro length is owned by the HyperFrames template",
+        }),
+      ),
+      chapters: Type.Optional(
+        Type.String({
+          description: "TOC chapter titles, comma-separated (primary). Exclusive with --chapters-file",
+        }),
+      ),
+      chaptersFile: Type.Optional(
+        Type.String({ description: "TOC chapters JSON array file; exclusive with --chapters" }),
+      ),
+      current: Type.Optional(
+        Type.Number({ description: "TOC 0-based current chapter index (required for type=toc)" }),
+      ),
+      previous: Type.Optional(
+        Type.Number({
+          description: "TOC 0-based previous index for cursor travel; default current-1 (or current if 0)",
+        }),
+      ),
+    }),
+    run: generateScene,
+  },
+  {
+    path: ["generate", "render"],
+    family: "generate",
+    summary: "HyperFrames scene dir → mp4/webm/mov/gif/png/png-sequence/sprite",
+    description:
+      "Generate: scene project → one media product. " +
+      "Video/gif/png-sequence use `hyperframes render`. " +
+      "`-f png` (or `-o *.png`) uses `hyperframes snapshot` for one still — the fast path for static cards. " +
+      "`-f sprite` (dialog scene only) writes one directory of 4 named RGBA PNGs: " +
+      "idle, talk-closed, talk-open, wait-on (talk-closed also = wait blink-off). " +
+      "Default format mp4. Format from `-f` / `--format`, or from `-o` extension. " +
+      "CLI: `uvid generate render -i scenes/intro -o clips/intro.mp4 [--fps 25] [--quality high]`. " +
+      "Still: `uvid generate render -i scenes/md -o still.png -f png [--at-ms 0]`. " +
+      "Dialog set: `uvid generate render -i scenes/dialog -o clips/dialog -f sprite`. " +
+      "PNG sequence: `… -f png-sequence -o frames/dir`.",
+    consumes: ["HyperFrames scene directory"],
+    produces: ["one video/gif/png file, PNG sequence directory, or sprite directory"],
+    params: Type.Object({
+      input: Type.String({ description: "Scene project directory (with index.html)" }),
+      output: Type.String({
+        description: "Output file (mp4/webm/mov/gif/png) or directory (png-sequence | sprite)",
+      }),
+      format: Type.Optional(
+        Type.String({
+          description: "mp4 (default) | webm | mov | gif | png | png-sequence | sprite; also from -o ext",
+        }),
+      ),
+      fps: Type.Optional(Type.Number({ description: "Render fps; default 25 (video formats)" })),
+      quality: Type.Optional(
+        Type.String({ description: "hyperframes quality: draft|standard|high; default high (video formats)" }),
+      ),
+      workers: Type.Optional(Type.Number({ description: "Parallel workers; default 1 (video formats)" })),
+      atMs: Type.Optional(
+        Type.Number({ description: "Still capture time ms for format=png; default 0" }),
+      ),
+    }),
+    run: generateRender,
+  },
+  {
+    path: ["generate", "sheet"],
+    family: "generate",
+    summary: "images → one contact-sheet image (native size unless cell size set)",
+    description:
+      "Generate: ImageMagick montage of stills with per-cell labels (title from filename). " +
+      "Does not open a viewer. Cells keep native pixels unless --cell-width/--cell-height. " +
+      "CLI: `uvid generate sheet [FILE…] [-o sheet.jpg] [--list paths.txt] [--tile 4x2]`. " +
+      "Compose: `uvid generate sheet a.jpg b.jpg -o s.jpg && uvid preview s.jpg`.",
+    consumes: ["images"],
+    produces: ["one contact-sheet image"],
+    positionals: true,
+    params: Type.Object({
+      input: Type.Optional(
+        Type.String({ description: "Single image (optional if positionals / --list)" }),
+      ),
+      output: Type.Optional(
+        Type.String({ description: "Output image file; omit → stdout (binary; not a TTY)" }),
+      ),
+      paths: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "Additional images (CLI trailing args; tools may pass an array)",
+        }),
+      ),
+      list: Type.Optional(
+        Type.String({ description: "Text file: one image path per line (# comments ok)" }),
+      ),
+      tile: Type.Optional(
+        Type.String({ description: "Montage grid e.g. 4x2 or 3x; default auto from count" }),
+      ),
+      cellWidth: Type.Optional(
+        Type.Number({
+          description: "Max cell width px; omit with cellHeight = no resize (native)",
+        }),
+      ),
+      cellHeight: Type.Optional(
+        Type.Number({
+          description: "Max cell height px; omit with cellWidth = no resize (native)",
+        }),
+      ),
+      gap: Type.Optional(Type.Number({ description: "Cell gap px; default 12" })),
+      labelPad: Type.Optional(
+        Type.Number({ description: "Extra bottom pad for labels px; default 28" }),
+      ),
+      title: Type.Optional(Type.String({ description: "Overall sheet title (montage -title)" })),
+      font: Type.Optional(Type.String({ description: "Label font; default FreeSans" })),
+      pointSize: Type.Optional(Type.Number({ description: "Label point size; default 16" })),
+    }),
+    run: generateSheet,
+  },
+
+  // ── preview (viewer only; no file product) ────────────────────────────
+  {
+    path: ["preview"],
+    family: "meta",
+    summary: "open media: video/audio→mpv, image→imv (no file output)",
+    description:
+      "Human viewer only — no -o, no sheet bake. " +
+      "video/audio → mpv; image(s) → imv. " +
+      "Contact sheet: `uvid generate sheet … -o s.jpg` then `uvid preview s.jpg`. " +
+      "CLI: `uvid preview [FILE…]` or `-i FILE` / `--list paths.txt`.",
+    consumes: ["media files"],
+    produces: ["viewer session"],
+    positionals: true,
+    params: Type.Object({
+      input: Type.Optional(
+        Type.String({ description: "Single input file (optional if positionals / --list)" }),
+      ),
+      paths: Type.Optional(
+        Type.Array(Type.String(), {
+          description: "Additional files (CLI trailing args; tools may pass an array)",
+        }),
+      ),
+      list: Type.Optional(
+        Type.String({ description: "Text file: one path per line (# comments ok)" }),
+      ),
+    }),
+    run: preview,
   },
 ];
 
-// `uvid flow` — the pipeline describes itself from the command table above, so the
-// topology can never drift from the implementation and needs no external docs.
-commands.push({
-  path: ["flow"],
-  summary: "print the artifact pipeline (what each command consumes/produces)",
-  description:
-    "Self-description: every uvid command is a filter between artifacts on disk. " +
-    "This prints the full topology grouped by stage, including where human/LLM " +
-    "decisions sit between filters. CLI: `uvid flow`.",
-  params: Type.Object({}),
-  run: async (_p, ctx) => {
-    ctx.log("uvid pipeline — every command is a filter: consumes → produces");
-    ctx.log("");
-    const stages: Array<[string, string | null]> = [
-      ["prep", null],
-      ["draft", "editor writes decisions into draft.json between `init` and `check` (word cuts, ranges in/out, smoothing)"],
-      ["finish", "reviewer locks draft.json before finish (listen to premixes, inspect evidence)"],
-      ["deliver", null],
-    ];
-    for (const [stage, note] of stages) {
-      if (note) ctx.log(`── human/LLM filter: ${note}`);
-      ctx.log(`${stage}`);
-      for (const cmd of commands.filter((c) => c.path[0] === stage)) {
-        const name = cmd.path.join(" ").padEnd(18);
-        ctx.log(`  ${name} ${(cmd.consumes ?? []).join(" + ")} → ${(cmd.produces ?? []).join(", ")}`);
-      }
-      ctx.log("");
-    }
-    ctx.log("asr is an external filter: media (normalized) → asr.json (word-level; e.g. transcribe_media)");
-    ctx.log("artifact contracts: draft.json = schemas/draft.schema.json; asr.json = [{text,startMs,endMs,words:[{text,startMs,endMs}]}]");
-  },
-});

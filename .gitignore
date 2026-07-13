@@ -3,5 +3,6 @@ dist/
 .cache/
 *.tsbuildinfo
 .pi-subagents/
+20260709/
 *.log
 .DS_Store

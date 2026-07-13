@@ -1,85 +1,85 @@
-# Script：台本（创作物 1/3）
+# Script: episode script (creative file 1/3)
 
-**这是 AI 要写的三份文件之一。** 另两份：`draft` 决策、`bgm.mml`。
+**This is one of the three AI/human-authored creative files.** The other two are `edit.json` editing intent and `bgm.mml`.
 
-**完成态**：`script.md` 能被 `uvid_finish_plan` 解析出预期章节与 TOC；媒体在 `raw/NN.ext`。
+**Done means:** `script.md` follows this contract, and referenced media exists under `raw/NN.ext`.
 
 ## Contract
 
-### frontmatter
+### Frontmatter
 
 ```yaml
 ---
-title: <标题>
-theme: <theme 名，如 onedark>
+title: <episode title>
+theme: <theme name, e.g. onedark>
 fps: 25
 ---
 ```
 
-| 键 | 规则 |
+| Key | Rule |
 |---|---|
-| `fps` | **必填**，正整数 |
-| `title` | 可选；缺省用正文 `#` |
-| `theme` | Finish 场景用；有包装时写上 |
+| `fps` | **Required**, positive integer |
+| `title` | Optional; default to the first body `#` heading |
+| `theme` | Used by packaging/scene generation when visuals are generated |
 
-### 结构
+### Structure
 
-| 元素 | 规则 |
+| Element | Rule |
 |---|---|
-| `#` | 期标题，**不进 TOC** |
-| `##` | **进 TOC** 的章名 |
-| `###`+ | 正文，不进 TOC |
-| `---` | 分隔媒体块；带媒体的块 = 一章 |
-| 媒体 | `<audio src="raw/NN.ext">` 或 `<video src="raw/NN.ext">` |
-| 基名 `NN` | = source id |
+| `#` | Episode title, **not** included in TOC |
+| `##` | Chapter title, included in TOC |
+| `###`+ | Body headings, not included in TOC |
+| `---` | Separates media blocks; a block containing media is one source block |
+| Media | `<audio src="raw/NN.ext">` or `<video src="raw/NN.ext">` |
+| Basename `NN` | Source id |
 
-- `<video>` → draft `kind=video`（声画同切）  
-- `<audio>` → `kind=audio`（人声；画面来自 markdown 场景）  
-- intro/toc/outro/bgm **不要**写进台本媒体行  
+- `<video>` means later editing must consider sound-picture relationships; it may be cut as linked audio/video or split tracks.
+- `<audio>` means later editing cuts audio only; picture comes from markdown/static visuals.
+- Do **not** write intro/toc/outro/bgm as media tags in the script.
 
-### 完整示例
+### Complete example
 
 ```markdown
 ---
-title: 示例期
+title: Example Episode
 theme: onedark
 fps: 25
 ---
 
-# 示例期
+# Example Episode
 
 ---
 
-## 开场讲解
+## Opening explanation
 
 <audio src="raw/01.mp4"></audio>
 
-口播要点……
+Talking points...
 
 ---
 
-## 实操演示
+## Screen recording demo
 
 <video src="raw/02.mp4"></video>
 
 ---
 
-## 收尾
+## Closing
 
 <audio src="raw/03.mp4"></audio>
 ```
 
-## 正确写法
+## How to write it
 
-1. 按 Contract **一次写好**整份台本（结构 + 媒体路径 + 正文）  
-2. 媒体文件已在 / 将放入 `raw/NN.ext`  
-3. 需要时用 `uvid_finish_plan` 核对 TOC 是否符合预期（验收，不是边写边探）  
+1. Write the whole script in the contract shape in one pass: structure, media paths, and body markdown.
+2. Media files must already exist, or be planned to exist, under `raw/NN.ext`.
+3. Prep reads `script.md` directly according to this contract; no extra analyze-script tool is needed.
 
-## 完成判据
+## Completion checklist
 
-- [ ] 有效 `fps`（及需要的 `theme`）  
-- [ ] 进目录的章是 `##`  
-- [ ] 每章媒体标签与 `raw/NN` 一致  
-- [ ] plan 解析的 TOC/章节符合预期  
+- [ ] Valid `fps` exists, and `theme` exists when visual packaging is needed.
+- [ ] TOC chapters use `##`.
+- [ ] Every media tag points to `raw/NN.ext`.
+- [ ] The TOC formed by `##` headings matches the intended episode structure.
 
-→ Prep：`references/prep.md`
+→ Prep: `references/prep.md`

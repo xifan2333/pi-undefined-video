@@ -1,0 +1,406 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/xifan2333/pi-undefined-video/schemas/edit.schema.json",
+  "title": "uvid.edit",
+  "description": "Sparse edit intent for an episode. Transcript ids are the base; default is keep. Actions are the only human/AI cut decisions. version 0 = v0.1 contract.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "version", "status", "sources"],
+  "properties": {
+    "kind": {
+      "const": "uvid.edit",
+      "description": "Document type marker."
+    },
+    "version": {
+      "const": 0,
+      "description": "Schema version. 0 means v0.1 contract."
+    },
+    "status": {
+      "$ref": "#/$defs/status",
+      "description": "Review stage. Unresolved check actions block ready."
+    },
+    "title": {
+      "type": "string",
+      "description": "Optional human title."
+    },
+    "script": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Path to episode script markdown, relative to episode root."
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Ordered source list. Compile order follows this array.",
+      "items": { "$ref": "#/$defs/source" }
+    },
+    "pipeline": {
+      "$ref": "#/$defs/pipeline",
+      "description": "Optional bookkeeping for review stages and evidence paths."
+    },
+    "notes": {
+      "description": "Freeform human/agent notes. Not a compile input.",
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } },
+        { "type": "object" }
+      ]
+    },
+    "schemaGaps": {
+      "type": "array",
+      "description": "Discovery notes while schema evolves. Not a compile input.",
+      "items": {
+        "type": "object",
+        "required": ["id"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "area": { "type": "string" },
+          "need": { "type": "string" },
+          "why": { "type": "string" },
+          "note": { "type": "string" },
+          "examples": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "subtitle-draft",
+        "audio-reviewed",
+        "video-reviewed",
+        "ready"
+      ]
+    },
+    "millis": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Milliseconds from media start."
+    },
+    "sourceId": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+$",
+      "description": "Source id, usually from cache/<id>/..."
+    },
+    "turnId": {
+      "type": "string",
+      "pattern": "^s[A-Za-z0-9_-]+-t[0-9]{3}$",
+      "description": "Turn id: s<sourceId>-t<turnIndex3>, e.g. s02-t011"
+    },
+    "wordId": {
+      "type": "string",
+      "pattern": "^s[A-Za-z0-9_-]+-t[0-9]{3}-w[0-9]{3}$",
+      "description": "Word id: s<sourceId>-t<turnIndex3>-w<wordIndex3>, e.g. s02-t010-w000"
+    },
+    "unitId": {
+      "oneOf": [
+        { "$ref": "#/$defs/turnId" },
+        { "$ref": "#/$defs/wordId" }
+      ]
+    },
+    "rangeTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startMs", "endMs"],
+      "properties": {
+        "startMs": { "$ref": "#/$defs/millis" },
+        "endMs": { "$ref": "#/$defs/millis" }
+      },
+      "description": "Absolute time range for non-speech cuts (lead/trail/gap/internal silence)."
+    },
+    "target": {
+      "description": "Action target: one unit id, list of unit ids, or absolute range.",
+      "oneOf": [
+        { "$ref": "#/$defs/unitId" },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/unitId" }
+        },
+        { "$ref": "#/$defs/rangeTarget" }
+      ]
+    },
+    "track": {
+      "type": "string",
+      "enum": ["audio", "video", "both"],
+      "default": "audio",
+      "description": "Which media track the action affects. replace_text is text-layer even when track is audio."
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["subtitle", "audio", "video"],
+      "description": "Which review pass authored the action."
+    },
+    "kind": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why taxonomy. Recommended: filler | repetition | false_start | mistake | asr_error | pause | visual_action. Open string for evolution."
+    },
+    "evidence": {
+      "type": "object",
+      "description": "Freeform pointers to atomic evidence (silence/waveform/frame-diff/frames/metrics).",
+      "additionalProperties": true
+    },
+    "word": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "startMs", "endMs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/wordId" },
+        "text": { "type": "string" },
+        "startMs": { "$ref": "#/$defs/millis" },
+        "endMs": { "$ref": "#/$defs/millis" }
+      }
+    },
+    "turn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "text", "startMs", "endMs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/turnId" },
+        "text": { "type": "string" },
+        "startMs": { "$ref": "#/$defs/millis" },
+        "endMs": { "$ref": "#/$defs/millis" },
+        "words": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/word" }
+        }
+      }
+    },
+    "actionBase": {
+      "type": "object",
+      "required": ["id", "target", "op"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Action id unique within its source, e.g. a02-005"
+        },
+        "target": { "$ref": "#/$defs/target" },
+        "track": { "$ref": "#/$defs/track" },
+        "kind": { "$ref": "#/$defs/kind" },
+        "reason": { "type": "string" },
+        "stage": { "$ref": "#/$defs/stage" },
+        "evidence": { "$ref": "#/$defs/evidence" }
+      }
+    },
+    "actionDrop": {
+      "allOf": [
+        { "$ref": "#/$defs/actionBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "target", "op"],
+          "properties": {
+            "id": true,
+            "target": true,
+            "track": true,
+            "kind": true,
+            "reason": true,
+            "stage": true,
+            "evidence": true,
+            "op": { "const": "drop" }
+          }
+        }
+      ],
+      "description": "Remove target from selected track(s). Does not change display text."
+    },
+    "actionKeep": {
+      "allOf": [
+        { "$ref": "#/$defs/actionBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "target", "op"],
+          "properties": {
+            "id": true,
+            "target": true,
+            "track": true,
+            "kind": true,
+            "reason": true,
+            "stage": true,
+            "evidence": true,
+            "op": { "const": "keep" }
+          }
+        }
+      ],
+      "description": "Explicit keep; can override a broader drop."
+    },
+    "actionReplaceText": {
+      "allOf": [
+        { "$ref": "#/$defs/actionBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "target", "op", "text"],
+          "properties": {
+            "id": true,
+            "target": true,
+            "track": true,
+            "kind": true,
+            "reason": true,
+            "stage": true,
+            "evidence": true,
+            "op": { "const": "replace_text" },
+            "text": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Corrected display / caption text. Does not cut media."
+            },
+            "words": {
+              "type": "array",
+              "description": "Optional source-axis word timings for turn-level replace_text. When present, timeline projects these as captions[].words (no rebuild/re-tokenize). Prefer word-level replace_text; if the whole turn must change, author words here by reusing ASR starts/ends.",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["text", "startMs", "endMs"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "text": { "type": "string", "minLength": 1 },
+                  "startMs": { "$ref": "#/$defs/millis" },
+                  "endMs": { "$ref": "#/$defs/millis" }
+                }
+              }
+            }
+          }
+        }
+      ],
+      "description": "Text-layer only. May coexist with drop/keep on the same target. Turn-level replace should carry words[] when karaoke/mouth timing matters."
+    },
+    "actionHoldUntil": {
+      "allOf": [
+        { "$ref": "#/$defs/actionBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "target", "op", "untilMs"],
+          "properties": {
+            "id": true,
+            "target": true,
+            "track": {
+              "const": "video",
+              "description": "hold_until is video-only."
+            },
+            "kind": true,
+            "reason": true,
+            "stage": true,
+            "evidence": true,
+            "op": { "const": "hold_until" },
+            "untilMs": {
+              "$ref": "#/$defs/millis",
+              "description": "Keep video through this media timestamp."
+            }
+          }
+        }
+      ],
+      "description": "Video hold from target speech start through untilMs. Audio outside audio keeps is silent."
+    },
+    "actionCheck": {
+      "allOf": [
+        { "$ref": "#/$defs/actionBase" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "target", "op"],
+          "properties": {
+            "id": true,
+            "target": true,
+            "track": true,
+            "kind": true,
+            "reason": true,
+            "stage": true,
+            "evidence": true,
+            "op": { "const": "check" }
+          }
+        }
+      ],
+      "description": "Unresolved question. Any remaining check blocks status ready."
+    },
+    "action": {
+      "oneOf": [
+        { "$ref": "#/$defs/actionDrop" },
+        { "$ref": "#/$defs/actionKeep" },
+        { "$ref": "#/$defs/actionReplaceText" },
+        { "$ref": "#/$defs/actionHoldUntil" },
+        { "$ref": "#/$defs/actionCheck" }
+      ],
+      "description": "v0.1 closed op set: drop | keep | replace_text | hold_until | check."
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "media", "asr", "transcript", "actions"],
+      "properties": {
+        "id": { "$ref": "#/$defs/sourceId" },
+        "type": {
+          "type": "string",
+          "enum": ["audio", "video"],
+          "description": "audio sources usually render with a still at compile time."
+        },
+        "media": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Normalized media path used by compile."
+        },
+        "asr": {
+          "type": "string",
+          "minLength": 1,
+          "description": "ASR json path."
+        },
+        "visual": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional still for audio sources, e.g. cache/01/visual.png."
+        },
+        "transcript": {
+          "type": "array",
+          "description": "ASR snapshot with stable ids. Default keep.",
+          "items": { "$ref": "#/$defs/turn" }
+        },
+        "actions": {
+          "type": "array",
+          "description": "Sparse edit decisions for this source.",
+          "items": { "$ref": "#/$defs/action" }
+        }
+      }
+    },
+    "pipeline": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "stages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/status" }
+        },
+        "current": { "$ref": "#/$defs/status" },
+        "evidenceDir": { "type": "string" },
+        "ran": {
+          "type": "object",
+          "description": "Paths produced by atomic analyze tools.",
+          "additionalProperties": true,
+          "properties": {
+            "waveform": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "silence": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "frameDiff": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "findings": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

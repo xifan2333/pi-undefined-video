@@ -1,10 +1,16 @@
 /**
  * undefined-video pi extension — thin adapter over src/spec.ts.
  *
- * Every uvid command is registered as a pi tool with the exact same TypeBox schema
- * the CLI uses, and executed in-process (async, cancellable via AbortSignal). No
- * subprocess spawning: the extension and the CLI share the same library code, so
- * behavior and flags never drift. Tool names follow `uvid_<resource>_<action>`.
+ * Every uvid command is registered as a pi tool with the same TypeBox schema
+ * the CLI uses, executed in-process (async, AbortSignal). No subprocess spawn:
+ * extension and CLI share library code so flags never drift.
+ *
+ * Tool names: `uvid_<family>_<action>` e.g. uvid_analyze_loudness.
+ *
+ * I/O in tool host:
+ *   - pass explicit `input` / `output` paths (cwd-relative or absolute)
+ *   - omit-output JSON: payload text is returned in the tool result
+ *   - binary generate requires `output` path
  */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { commands } from "../src/spec.ts";
@@ -22,6 +28,7 @@ export default function (pi: ExtensionAPI) {
         await cmd.run(params, {
           cwd: process.cwd(),
           signal,
+          toolHost: true,
           log: (line) => lines.push(line),
         });
         return {

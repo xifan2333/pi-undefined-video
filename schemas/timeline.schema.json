@@ -1,0 +1,294 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/xifan2333/pi-undefined-video/schemas/timeline.schema.json",
+  "title": "uvid.timeline",
+  "description": "Compiled geometry from edit.json. basis=aroll is body only; basis=program inserts packaging media and a dialog[] chrome sequence. Optional bgm is timeline-bound audio mixed by generate video. Sparse intent stays in edit; this file is the intermediate geometry product for video/captions/otio.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "version", "basis", "from", "packaging", "policy", "durationMs", "segments", "captions", "dialog"],
+  "properties": {
+    "kind": { "const": "uvid.timeline" },
+    "version": {
+      "const": 0,
+      "description": "Schema version. 0 = v0.1 contract frozen from edit-v0 aroll experiment."
+    },
+    "basis": {
+      "type": "string",
+      "enum": ["aroll", "program"],
+      "description": "aroll = body only; program = packaging inserted (intro/toc/outro)."
+    },
+    "from": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["edit"],
+      "properties": {
+        "edit": { "type": "string", "minLength": 1 },
+        "status": { "type": "string" },
+        "title": { "type": "string" },
+        "script": { "type": "string" }
+      }
+    },
+    "packaging": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["intro", "outro", "tocBefore", "toc"],
+      "properties": {
+        "intro": {
+          "type": ["string", "null"],
+          "description": "Episode-relative intro media path when inserted; null if none."
+        },
+        "outro": {
+          "type": ["string", "null"],
+          "description": "Episode-relative outro media path when inserted; null if none."
+        },
+        "tocBefore": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Source ids before which a TOC media segment was inserted."
+        },
+        "toc": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Episode-relative TOC media paths aligned with tocBefore."
+        },
+        "tocTitles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Optional titles aligned with tocBefore."
+        }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Compile/render defaults applied while building this timeline."
+    },
+    "durationMs": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Program duration in milliseconds."
+    },
+    "unresolved": {
+      "type": "array",
+      "description": "check actions that did not affect geometry.",
+      "items": { "type": "object", "additionalProperties": true }
+    },
+    "sources": {
+      "type": "array",
+      "description": "Per-source program span summary after compile.",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "type", "programStartMs", "programEndMs"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string", "enum": ["audio", "video"] },
+          "programStartMs": { "type": "integer", "minimum": 0 },
+          "programEndMs": { "type": "integer", "minimum": 0 },
+          "segments": { "type": "integer", "minimum": 0 },
+          "captions": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "segments": {
+      "type": "array",
+      "description": "Ordered playable segments on the program axis.",
+      "items": { "$ref": "#/$defs/segment" }
+    },
+    "captions": {
+      "type": "array",
+      "description": "Caption cues already mapped onto this timeline's program axis.",
+      "items": { "$ref": "#/$defs/caption" }
+    },
+    "dialog": {
+      "type": "array",
+      "description": "Program-axis dialog chrome state sequence. Empty for basis=aroll. States: idle | talk-closed | talk-open | wait-on | hidden. Packaging (intro/toc/outro) is hidden (no person). talk-closed also = wait blink-off.",
+      "items": { "$ref": "#/$defs/dialogCue" }
+    },
+    "bgm": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["media", "durationMs", "startMs", "endMs"],
+      "properties": {
+        "media": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Episode-relative BGM audio path (from generate bgm / any audio bed)."
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Probed duration of the BGM media file."
+        },
+        "startMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Program-axis start of BGM window (intro end; 0 if no intro)."
+        },
+        "endMs": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Program-axis end of BGM window (outro start; durationMs if no outro)."
+        },
+        "loop": {
+          "type": "boolean",
+          "description": "Loop BGM to cover [startMs,endMs) when bed is shorter; default true."
+        },
+        "volume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Linear bed volume under A-roll dialog; default 0.22."
+        }
+      },
+      "description": "Optional BGM bed bound at timeline compile. generate video mixes under program audio. null when --bgm omitted."
+    },
+    "dialogSprites": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["dir"],
+      "properties": {
+        "dir": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Episode-relative directory of dialog state PNGs (idle/talk-closed/talk-open/wait-on)."
+        },
+        "needles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Named PNG basenames without extension."
+        }
+      },
+      "description": "Dialog sprite asset set for program compose / OTIO. null when --dialog omitted."
+    },
+    "captionsStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["burn", "style", "fg", "bg", "font"],
+      "properties": {
+        "burn": { "type": "boolean", "description": "Whether generate video burns ASS into the product." },
+        "style": { "type": "string", "enum": ["typewriter", "plain"] },
+        "fg": { "type": "string" },
+        "bg": { "type": "string" },
+        "font": { "type": "string" },
+        "fontSize": { "type": "integer", "minimum": 1 }
+      },
+      "description": "ASS look + burn policy for generate video / OTIO. Bound at timeline compile."
+    }
+  },
+  "$defs": {
+    "millis": { "type": "integer", "minimum": 0 },
+    "seamEdge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fadeMs", "snapMs", "risk"],
+      "properties": {
+        "fadeMs": { "type": "integer", "minimum": 0 },
+        "snapMs": { "type": "integer" },
+        "risk": { "type": "string", "enum": ["low", "high"] }
+      }
+    },
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "role",
+        "startMs",
+        "endMs",
+        "hasAudio",
+        "hasVideo"
+      ],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "role": {
+          "type": "string",
+          "enum": ["aroll", "intro", "toc", "outro"],
+          "description": "aroll = compiled edit body; packaging roles from flags."
+        },
+        "sourceId": { "type": "string" },
+        "sourceType": { "type": "string", "enum": ["audio", "video"] },
+        "media": { "type": ["string", "null"] },
+        "visual": { "type": ["string", "null"] },
+        "inMs": { "$ref": "#/$defs/millis" },
+        "outMs": { "$ref": "#/$defs/millis" },
+        "startMs": { "$ref": "#/$defs/millis" },
+        "endMs": { "$ref": "#/$defs/millis" },
+        "hasAudio": { "type": "boolean" },
+        "hasVideo": { "type": "boolean" },
+        "picture": {
+          "type": "string",
+          "enum": ["still", "media", "none"],
+          "description": "still = visual.png under audio; media = source/packaging video frames; none reserved (packaging always uses media)."
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["av", "video_only", "packaging"],
+          "description": "av = speech+picture; video_only = hold picture without aroll audio; packaging = intro/toc/outro media slot."
+        },
+        "beforeSourceId": {
+          "type": "string",
+          "description": "For role=toc: insert before this source id."
+        },
+        "title": {
+          "type": "string",
+          "description": "Optional packaging title (toc/intro/outro)."
+        },
+        "seam": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "in": { "$ref": "#/$defs/seamEdge" },
+            "out": { "$ref": "#/$defs/seamEdge" }
+          }
+        }
+      }
+    },
+    "captionWord": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startMs", "endMs", "text"],
+      "properties": {
+        "id": { "type": "string" },
+        "startMs": { "$ref": "#/$defs/millis" },
+        "endMs": { "$ref": "#/$defs/millis" },
+        "text": { "type": "string" }
+      },
+      "description": "Word on the program axis. Final RPG typewriter captions use these; preview SRT can collapse to turn text."
+    },
+    "caption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startMs", "endMs", "text"],
+      "properties": {
+        "startMs": { "$ref": "#/$defs/millis" },
+        "endMs": { "$ref": "#/$defs/millis" },
+        "text": { "type": "string" },
+        "sourceId": { "type": "string" },
+        "turnId": { "type": "string" },
+        "words": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/captionWord" },
+          "description": "Per-word program timestamps for RPG/typewriter reveal. Omitted only when source had no words."
+        }
+      }
+    },
+    "dialogCue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startMs", "endMs", "state"],
+      "properties": {
+        "startMs": { "$ref": "#/$defs/millis" },
+        "endMs": { "$ref": "#/$defs/millis" },
+        "state": {
+          "type": "string",
+          "enum": ["idle", "talk-closed", "talk-open", "wait-on", "hidden"],
+          "description": "Dialog chrome state. idle/talk-*/wait-on map to sprite PNGs; hidden = fully transparent (packaging). talk-closed doubles as wait blink-off."
+        },
+        "turnId": { "type": "string" },
+        "sourceId": { "type": "string" }
+      },
+      "description": "One contiguous dialog chrome state on the program axis."
+    }
+  }
+}

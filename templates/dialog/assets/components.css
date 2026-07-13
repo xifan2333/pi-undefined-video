@@ -1,0 +1,157 @@
+/* ============================================================
+   未定义项目 · Markdown 像素风组件库
+   依赖 themes.css（语义色变量）；字体由系统提供（yay 安装）
+   在 <div class="md" data-theme="..."> 内使用
+   ============================================================ */
+
+.md {
+  font-family:var(--font-body);
+  color: var(--fg);
+  line-height: 1.6;
+  --gap: 28px;              /* 块间距 */
+  --pad: 0;
+}
+.md > * + * { margin-top: var(--gap); }
+
+/* ---------- 1. 标题 h1–h6（Display 天王星像素）---------- */
+.md h1,.md h2,.md h3,.md h4,.md h5,.md h6{
+  font-family:var(--font-display); line-height:1.15; color:var(--fg); font-weight:normal;
+}
+.md h1{ font-size:88px; }
+.md h2{ font-size:66px; }
+.md h3{ font-size:55px; }
+.md h4{ font-size:44px; }
+.md h5{ font-size:33px; }
+.md h6{ font-size:33px; color:var(--muted); }
+/* h1/h2 前置像素强调块 */
+.md h1::before,.md h2::before{
+  content:""; display:inline-block; vertical-align:0.12em;
+  width:0.5em; height:0.5em; margin-right:0.35em; background:var(--keyword);
+}
+
+/* ---------- 2. 段落 + 行内 ---------- */
+.md p{ font-size:36px; }
+.md strong{ color:var(--fg); text-shadow:1px 0 currentColor; }      /* 伪加粗 */
+.md em{ display:inline-block; transform:skewX(-9deg); }             /* 伪斜体 */
+.md del{ text-decoration:line-through; color:var(--muted); }
+.md a{ color:var(--link); text-decoration:underline; text-underline-offset:4px; }
+.md code{                                                           /* 行内代码 */
+  font-family:var(--font-body); font-size:0.9em;
+  background:color-mix(in srgb, var(--fg) 12%, transparent);
+  color:var(--keyword); padding:2px 10px;
+}
+
+/* ---------- 3. 分割线 HR（像素点阵）---------- */
+.md hr{
+  border:0; height:10px; background:
+    repeating-linear-gradient(90deg, var(--muted) 0 16px, transparent 16px 32px);
+}
+
+/* ---------- 4. 引用块 blockquote ---------- */
+.md blockquote{
+  border-left:10px solid var(--keyword);
+  padding:6px 0 6px 28px; color:var(--muted); font-size:36px;
+}
+
+/* ---------- 5. Callout / 告警 ---------- */
+.md .callout{
+  border-left:10px solid var(--link); padding:22px 26px; font-size:36px;
+  background:color-mix(in srgb, var(--link) 12%, transparent);
+}
+.md .callout .title{ font-family:var(--font-display); font-size:33px; color:var(--link); margin-bottom:10px; }
+.md .callout[data-type="warn"]{ border-color:var(--warn); background:color-mix(in srgb,var(--warn) 12%,transparent); }
+.md .callout[data-type="warn"] .title{ color:var(--warn); }
+.md .callout[data-type="danger"]{ border-color:var(--danger); background:color-mix(in srgb,var(--danger) 12%,transparent); }
+.md .callout[data-type="danger"] .title{ color:var(--danger); }
+.md .callout[data-type="ok"]{ border-color:var(--ok); background:color-mix(in srgb,var(--ok) 12%,transparent); }
+.md .callout[data-type="ok"] .title{ color:var(--ok); }
+
+/* ---------- 6. 无序列表 ---------- */
+.md ul{ list-style:none; padding-left:14px; }
+.md ul > li{ position:relative; padding-left:44px; font-size:36px; }
+.md ul > li + li{ margin-top:14px; }
+.md ul > li::before{
+  content:""; position:absolute; left:6px; top:0.55em;
+  width:16px; height:16px; background:var(--keyword);
+}
+
+/* ---------- 7. 有序列表 ---------- */
+.md ol{ list-style:none; counter-reset:ol; padding-left:14px; }
+.md ol > li{ position:relative; padding-left:64px; font-size:36px; counter-increment:ol; }
+.md ol > li + li{ margin-top:14px; }
+.md ol > li::before{
+  content:counter(ol); position:absolute; left:0; top:0;
+  min-width:44px; height:44px; line-height:44px; text-align:center;
+  font-family:var(--font-display); font-size:33px;
+  color:var(--bg); background:var(--keyword);
+}
+
+/* ---------- 8. 任务列表 ---------- */
+.md ul.task > li::before{ display:none; }
+.md ul.task > li{ padding-left:56px; }
+.md ul.task > li .box{
+  position:absolute; left:4px; top:0.35em; width:30px; height:30px;
+  border:4px solid var(--muted); box-sizing:border-box;
+}
+.md ul.task > li.done .box{ background:var(--ok); border-color:var(--ok); }
+.md ul.task > li.done .box::after{
+  content:""; position:absolute; left:6px; top:1px; width:8px; height:16px;
+  border:solid var(--bg); border-width:0 4px 4px 0; transform:rotate(45deg);
+}
+.md ul.task > li.done{ color:var(--muted); }
+
+/* ---------- 9. 嵌套列表 ---------- */
+.md li > ul,.md li > ol{ margin-top:14px; }
+
+/* ---------- 10. 代码块 ---------- */
+.md pre{
+  background:color-mix(in srgb, var(--fg) 8%, var(--bg));
+  border:3px solid var(--muted); padding:24px 28px; overflow:hidden;
+  font-family:var(--font-mono); font-size:36px; line-height:1.5; color:var(--fg);
+  position:relative;
+}
+.md pre[data-lang]::before{
+  content:attr(data-lang); position:absolute; top:0; right:0;
+  font-family:var(--font-caption); font-size:21px; color:var(--bg);
+  background:var(--muted); padding:2px 14px;
+}
+.md pre .tok-key{ color:var(--keyword); }
+.md pre .tok-str{ color:var(--ok); }
+.md pre .tok-num{ color:var(--warn); }
+.md pre .tok-com{ color:var(--muted); }
+.md pre .tok-fn { color:var(--link); }
+/* Shiki 编译期高亮输出：保留 token inline color，但外壳使用项目像素样式 */
+.md pre.shiki{
+  background:color-mix(in srgb, var(--fg) 8%, var(--bg)) !important;
+  border:3px solid var(--muted); padding:24px 28px; overflow:hidden;
+  font-family:var(--font-mono); font-size:36px; line-height:1.5;
+}
+.md pre.shiki code{ background:transparent; padding:0; color:inherit; font-size:inherit; }
+.md pre.shiki span{ font-family:inherit; }
+
+/* ---------- 11. 表格 ---------- */
+.md table{ border-collapse:collapse; font-size:36px; width:100%; }
+.md th,.md td{ border:3px solid var(--muted); padding:12px 22px; text-align:left; }
+.md thead th{ background:color-mix(in srgb,var(--keyword) 22%,transparent); color:var(--keyword);
+  font-family:var(--font-display); font-size:33px; }
+.md tbody tr:nth-child(even) td{ background:color-mix(in srgb,var(--fg) 6%,transparent); }
+
+/* ---------- 12. 图片 + 图注 ---------- */
+.md figure{ text-align:center; }
+.md figure img{ image-rendering:pixelated; border:4px solid var(--muted); max-width:100%; }
+.md figure figcaption{ font-family:var(--font-caption); font-size:21px; color:var(--muted); margin-top:12px; }
+
+/* ---------- 13. 脚注 ---------- */
+.md sup.fnref{ color:var(--keyword); font-size:0.7em; vertical-align:super; }
+.md .footnotes{ font-family:var(--font-caption); font-size:21px; color:var(--muted);
+  border-top:3px solid var(--muted); padding-top:16px; }
+.md .footnotes .fnnum{ color:var(--keyword); margin-right:10px; }
+
+/* ---------- 14. 定义列表 ---------- */
+.md dl dt{ font-family:var(--font-display); font-size:33px; color:var(--keyword); }
+.md dl dd{ font-size:36px; padding-left:40px; margin-top:8px; }
+.md dl dd + dt{ margin-top:20px; }
+
+/* ---------- 15. 数学块 ---------- */
+.md .math{ text-align:center; font-size:48px; color:var(--fg); font-family:var(--font-mono); }
+.md .math .op{ color:var(--keyword); }
