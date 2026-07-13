@@ -32,16 +32,7 @@ import { resolveInput, resolveOutput, writeJsonOutput } from "../io.ts";
 import { hasAudioStream, hasVideoStream, mediaDurationMs } from "../proc.ts";
 import { type Ctx, fail, rel, resolvePath } from "../util.ts";
 
-/**
- * Dialog chrome states on the program axis.
- * - idle / talk-* / wait-on = 4 named RGBA needles (sprite export)
- * - hidden = fully transparent (packaging: intro/toc/outro); not a sprite file
- * talk-closed also = wait blink-off.
- */
-export const DIALOG_STATES = ["idle", "talk-closed", "talk-open", "wait-on", "hidden"] as const;
-export type DialogState = (typeof DIALOG_STATES)[number];
-/** Named PNG needles produced by `generate render -f sprite` (excludes hidden). */
-export const DIALOG_NEEDLES = ["idle", "talk-closed", "talk-open", "wait-on"] as const;
+import { DIALOG_NEEDLES, type DialogState } from "./sprite.ts";
 
 /**
  * Fallback mouth half-period when a turn has no words (~10 Hz).

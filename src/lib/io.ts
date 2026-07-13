@@ -160,11 +160,6 @@ export function emitWrittenPath(ctx: Ctx, absPath: string): void {
   process.stdout.write(abs + "\n");
 }
 
-/** Emit several product paths (one line each) — multi-file commands only. */
-export function emitWrittenPaths(ctx: Ctx, absPaths: string[]): void {
-  for (const p of absPaths) emitWrittenPath(ctx, p);
-}
-
 /** Write JSON main artifact to -o file, stdout, or tool result stream via log. */
 export function writeJsonOutput(ctx: Ctx, output: ResolvedOutput, payload: unknown): void {
   const text = JSON.stringify(payload, null, 2) + "\n";

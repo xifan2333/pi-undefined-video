@@ -17,13 +17,13 @@ import path from "node:path";
 import { emitWrittenPath } from "../io.ts";
 import { exec } from "../proc.ts";
 import { type Ctx, ensureDir, fail, rel, resolvePath } from "../util.ts";
+import { DIALOG_NEEDLES } from "./sprite.ts";
 
 const FORMATS = ["mp4", "webm", "mov", "gif", "png-sequence", "png", "sprite"] as const;
 export type RenderFormat = (typeof FORMATS)[number];
 
-/** Dialog chrome product states (talk-closed doubles as wait blink-off). */
-export const DIALOG_STATES = ["idle", "talk-closed", "talk-open", "wait-on"] as const;
-export type DialogState = (typeof DIALOG_STATES)[number];
+/** Sprite export states only (excludes program-only `hidden`). */
+const SPRITE_STATES = DIALOG_NEEDLES;
 
 export interface GenerateRenderParams {
   input?: string;
@@ -116,10 +116,10 @@ async function renderDialogStates(
 
   const srcHtml = fs.readFileSync(path.join(sceneDir, "index.html"), "utf8");
   ctx.log(
-    `generate render scene=${rel(ctx, sceneDir)} format=sprite states=${DIALOG_STATES.join(",")} → ${rel(ctx, outDir)}`,
+    `generate render scene=${rel(ctx, sceneDir)} format=sprite states=${SPRITE_STATES.join(",")} → ${rel(ctx, outDir)}`,
   );
 
-  for (const state of DIALOG_STATES) {
+  for (const state of SPRITE_STATES) {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), `uvid-dialog-${state}-`));
     const framesDir = path.join(workDir, "frames");
     try {
@@ -167,7 +167,7 @@ async function renderDialogStates(
     }
   }
 
-  for (const state of DIALOG_STATES) {
+  for (const state of SPRITE_STATES) {
     const p = path.join(outDir, `${state}.png`);
     if (!fs.existsSync(p)) fail(`sprite missing required file: ${state}.png`);
   }
@@ -313,7 +313,3 @@ export async function generateRender(p: GenerateRenderParams, ctx: Ctx): Promise
 
   emitWrittenPath(ctx, outPath);
 }
-
-/** @deprecated alias — use generateRender */
-export const generateSequence = generateRender;
-export type GenerateSequenceParams = GenerateRenderParams;

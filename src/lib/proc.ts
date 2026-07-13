@@ -158,6 +158,41 @@ function parseLoudnormJson(log: string): LoudnormMeasure {
   return raw as unknown as LoudnormMeasure;
 }
 
+/** Logged when a silent/near-silent pad forces the aresample-only passthrough. */
+export const LOUDNORM_PASSTHROUGH_NOTE =
+  "  loudnorm measure non-finite (silent/near-silent); using aresample passthrough";
+
+/** True when first-pass stats are usable for a linear second pass (silence yields -inf). */
+function isUsableLoudnormMeasure(m: LoudnormMeasure): boolean {
+  const keys = ["input_i", "input_tp", "input_lra", "input_thresh", "target_offset"] as const;
+  return keys.every((key) => Number.isFinite(Number(m[key])));
+}
+
+/**
+ * Build second-pass af chain: linear loudnorm when measures are finite,
+ * otherwise aresample-only passthrough (silent / near-silent pads).
+ */
+export function loudnormSecondPassFilter(
+  m: LoudnormMeasure,
+  opts: { lufs: number; tp: number; lra: number; sampleRate: number },
+): { filter: string; mode: "loudnorm" | "passthrough" } {
+  if (!isUsableLoudnormMeasure(m)) {
+    return { filter: `aresample=${opts.sampleRate}`, mode: "passthrough" };
+  }
+  const filter =
+    [
+      `loudnorm=I=${opts.lufs}:TP=${opts.tp}:LRA=${opts.lra}`,
+      `measured_I=${m.input_i}`,
+      `measured_TP=${m.input_tp}`,
+      `measured_LRA=${m.input_lra}`,
+      `measured_thresh=${m.input_thresh}`,
+      `offset=${m.target_offset}`,
+      "linear=true",
+      "print_format=summary",
+    ].join(":") + `,aresample=${opts.sampleRate}`;
+  return { filter, mode: "loudnorm" };
+}
+
 export interface LoudnormMeasureOpts extends ExecOpts {
   /** Inclusive start on source timeline (ms). */
   fromMs?: number;

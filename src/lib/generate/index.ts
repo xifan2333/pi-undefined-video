@@ -15,9 +15,7 @@ export { generateSheet, type GenerateSheetParams } from "./sheet.ts";
 export { generateScene, type GenerateSceneParams, type SceneType } from "./scene.ts";
 export {
   generateRender,
-  generateSequence,
   type GenerateRenderParams,
-  type GenerateSequenceParams,
   type RenderFormat,
 } from "./render.ts";
 export { generateTimeline, type GenerateTimelineParams } from "./timeline.ts";

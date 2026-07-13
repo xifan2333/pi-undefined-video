@@ -11,9 +11,21 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { formatExt, resolveFormat, type MediaFormat } from "../format.ts";
+import {
+  audioEncodeArgs,
+  formatExt,
+  isAudioFormat,
+  resolveFormat,
+  type MediaFormat,
+} from "../format.ts";
 import { materializeInput, openFilterIo, publishFileOutput } from "../io.ts";
-import { exec, ffmpeg } from "../proc.ts";
+import {
+  exec,
+  ffmpeg,
+  LOUDNORM_PASSTHROUGH_NOTE,
+  loudnormMeasure,
+  loudnormSecondPassFilter,
+} from "../proc.ts";
 import { type Ctx, ensureDir, fail, rel } from "../util.ts";
 
 export interface GenerateBgmParams {
@@ -706,52 +718,45 @@ async function loudnormToFormat(
   input: string,
   output: string,
   format: MediaFormat,
-  opts: { lufs: number; tp: number; lra: number; sampleRate: number; bitrate: number; signal?: AbortSignal },
+  opts: {
+    lufs: number;
+    tp: number;
+    lra: number;
+    sampleRate: number;
+    bitrate: number;
+    signal?: AbortSignal;
+    log?: (line: string) => void;
+  },
 ): Promise<void> {
-  if (format === "mp4") fail("generate bgm does not support mp4; use -f mp3|wav|aac");
+  if (!isAudioFormat(format)) fail("generate bgm does not support mp4; use -f mp3|wav|aac");
 
-  // First pass measure
-  const measureLog = await ffmpeg(
+  const m = await loudnormMeasure(input, opts.lufs, opts.tp, opts.lra, { signal: opts.signal });
+  const { filter, mode } = loudnormSecondPassFilter(m, {
+    lufs: opts.lufs,
+    tp: opts.tp,
+    lra: opts.lra,
+    sampleRate: opts.sampleRate,
+  });
+  if (mode === "passthrough") {
+    opts.log?.(LOUDNORM_PASSTHROUGH_NOTE);
+  }
+
+  ensureDir(path.dirname(output));
+  await ffmpeg(
     [
       "-i",
       input,
+      "-vn",
       "-af",
-      `loudnorm=I=${opts.lufs}:TP=${opts.tp}:LRA=${opts.lra}:print_format=json`,
-      "-f",
-      "null",
-      "-",
+      filter,
+      ...audioEncodeArgs(format, {
+        bitrate: `${opts.bitrate}k`,
+        sampleRate: opts.sampleRate,
+      }),
+      output,
     ],
     { signal: opts.signal },
   );
-  const start = measureLog.lastIndexOf("{");
-  const end = measureLog.lastIndexOf("}");
-  if (start < 0 || end <= start) fail("could not find loudnorm first-pass JSON for bgm");
-  const m = JSON.parse(measureLog.slice(start, end + 1)) as Record<string, string>;
-  for (const key of ["input_i", "input_tp", "input_lra", "input_thresh", "target_offset"]) {
-    if (typeof m[key] !== "string") fail(`loudnorm JSON missing field: ${key}`);
-  }
-
-  const filter =
-    [
-      `loudnorm=I=${opts.lufs}:TP=${opts.tp}:LRA=${opts.lra}`,
-      `measured_I=${m.input_i}`,
-      `measured_TP=${m.input_tp}`,
-      `measured_LRA=${m.input_lra}`,
-      `measured_thresh=${m.input_thresh}`,
-      `offset=${m.target_offset}`,
-      "linear=true",
-      "print_format=summary",
-    ].join(":") + `,aresample=${opts.sampleRate}`;
-
-  const encode =
-    format === "wav"
-      ? ["-c:a", "pcm_s16le", "-ar", String(opts.sampleRate), "-ac", "2"]
-      : format === "aac"
-        ? ["-c:a", "aac", "-b:a", `${opts.bitrate}k`, "-ar", String(opts.sampleRate), "-ac", "2"]
-        : ["-c:a", "libmp3lame", "-b:a", `${opts.bitrate}k`, "-ar", String(opts.sampleRate), "-ac", "2"];
-
-  ensureDir(path.dirname(output));
-  await ffmpeg(["-i", input, "-vn", "-af", filter, ...encode, output], { signal: opts.signal });
 }
 
 function rmQuiet(p: string): void {
@@ -826,17 +831,15 @@ export async function generateBgm(p: GenerateBgmParams, ctx: Ctx): Promise<void>
       sampleRate,
       bitrate,
       signal: ctx.signal,
+      log: ctx.log,
     });
 
     if (!fs.existsSync(outPath) || fs.statSync(outPath).size === 0) {
       fail("generate bgm produced empty output");
     }
 
-    if (output.path) {
-      ctx.log(`wrote ${rel(ctx, output.path)}`);
-    } else {
-      publishFileOutput(ctx, output, outPath);
-    }
+    // -o: emit absolute path on stdout; no -o: stream bytes.
+    publishFileOutput(ctx, output, outPath);
   } finally {
     mat.cleanup();
     try {

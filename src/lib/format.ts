@@ -42,14 +42,19 @@ export function formatExt(f: MediaFormat): string {
 }
 
 /** ffmpeg args after filters for audio encode (no -i / no output path). */
-export function audioEncodeArgs(f: AudioFormat): string[] {
+export function audioEncodeArgs(
+  f: AudioFormat,
+  opts: { bitrate?: string; sampleRate?: number } = {},
+): string[] {
+  const sampleRate = opts.sampleRate ?? 48000;
+  const bitrate = (opts.bitrate ?? "192k").trim() || "192k";
   switch (f) {
     case "mp3":
-      return ["-c:a", "libmp3lame", "-b:a", "192k", "-ar", "48000", "-ac", "2"];
+      return ["-c:a", "libmp3lame", "-b:a", bitrate, "-ar", String(sampleRate), "-ac", "2"];
     case "wav":
-      return ["-c:a", "pcm_s16le", "-ar", "48000", "-ac", "2"];
+      return ["-c:a", "pcm_s16le", "-ar", String(sampleRate), "-ac", "2"];
     case "aac":
-      return ["-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2"];
+      return ["-c:a", "aac", "-b:a", bitrate, "-ar", String(sampleRate), "-ac", "2"];
   }
 }
 

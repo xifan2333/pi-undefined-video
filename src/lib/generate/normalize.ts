@@ -11,13 +11,20 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
+  audioEncodeArgs,
   formatExt,
   isAudioFormat,
   resolveFormat,
   type MediaFormat,
 } from "../format.ts";
 import { materializeInput, openFilterIo, publishFileOutput } from "../io.ts";
-import { ffmpeg, hasVideoStream, loudnormMeasure, type LoudnormMeasure } from "../proc.ts";
+import {
+  ffmpeg,
+  hasVideoStream,
+  LOUDNORM_PASSTHROUGH_NOTE,
+  loudnormMeasure,
+  loudnormSecondPassFilter,
+} from "../proc.ts";
 import { type Ctx, ensureDir, fail, rel } from "../util.ts";
 
 export interface GenerateNormalizeParams {
@@ -37,26 +44,6 @@ export interface GenerateNormalizeParams {
   toMs?: number;
 }
 
-/** Second-pass loudnorm filter string from first-pass measure stats. */
-function loudnormFilter(
-  p: GenerateNormalizeParams,
-  m: LoudnormMeasure,
-  sampleRate: number,
-): string {
-  return (
-    [
-      `loudnorm=I=${p.lufs}:TP=${p.tp}:LRA=${p.lra}`,
-      `measured_I=${m.input_i}`,
-      `measured_TP=${m.input_tp}`,
-      `measured_LRA=${m.input_lra}`,
-      `measured_thresh=${m.input_thresh}`,
-      `offset=${m.target_offset}`,
-      "linear=true",
-      "print_format=summary",
-    ].join(":") + `,aresample=${sampleRate}`
-  );
-}
-
 function tmpPath(format: MediaFormat): string {
   return path.join(os.tmpdir(), `uvid-norm-${process.pid}-${Date.now()}${formatExt(format)}`);
 }
@@ -66,14 +53,6 @@ function seekArgs(fromMs: number, toMs?: number): string[] {
   if (fromMs > 0) args.push("-ss", (fromMs / 1000).toFixed(3));
   if (toMs != null) args.push("-t", ((toMs - fromMs) / 1000).toFixed(3));
   return args;
-}
-
-function audioEncode(format: "mp3" | "wav" | "aac", bitrate: string, sampleRate: number): string[] {
-  if (format === "wav") return ["-c:a", "pcm_s16le", "-ar", String(sampleRate), "-ac", "2"];
-  if (format === "mp3") {
-    return ["-c:a", "libmp3lame", "-b:a", bitrate, "-ar", String(sampleRate), "-ac", "2"];
-  }
-  return ["-c:a", "aac", "-b:a", bitrate, "-ar", String(sampleRate), "-ac", "2"];
 }
 
 export async function generateNormalize(p: GenerateNormalizeParams, ctx: Ctx): Promise<void> {
@@ -118,7 +97,15 @@ export async function generateNormalize(p: GenerateNormalizeParams, ctx: Ctx): P
       fromMs,
       toMs,
     });
-    const filter = loudnormFilter(p, m, sampleRate);
+    const { filter, mode } = loudnormSecondPassFilter(m, {
+      lufs: p.lufs,
+      tp: p.tp,
+      lra: p.lra,
+      sampleRate,
+    });
+    if (mode === "passthrough") {
+      ctx.log(LOUDNORM_PASSTHROUGH_NOTE);
+    }
     const window = seekArgs(fromMs, toMs);
 
     if (format === "mp4") {
@@ -143,7 +130,16 @@ export async function generateNormalize(p: GenerateNormalizeParams, ctx: Ctx): P
       );
     } else if (isAudioFormat(format)) {
       await ffmpeg(
-        [...window, "-i", mat.path, "-vn", "-af", filter, ...audioEncode(format, bitrate, sampleRate), outPath],
+        [
+          ...window,
+          "-i",
+          mat.path,
+          "-vn",
+          "-af",
+          filter,
+          ...audioEncodeArgs(format, { bitrate, sampleRate }),
+          outPath,
+        ],
         { signal: ctx.signal },
       );
     } else {
@@ -154,10 +150,9 @@ export async function generateNormalize(p: GenerateNormalizeParams, ctx: Ctx): P
       fail("normalize produced empty output");
     }
 
-    if (output.path) {
-      ctx.log(`wrote ${rel(ctx, output.path)}`);
-    } else {
-      publishFileOutput(ctx, output, outPath);
+    // -o: emit absolute path on stdout; no -o: stream bytes (then drop temp).
+    publishFileOutput(ctx, output, outPath);
+    if (!output.path) {
       try {
         fs.unlinkSync(outPath);
       } catch {

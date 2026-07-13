@@ -17,7 +17,7 @@ import { resolveInput, resolveOutput, publishFileOutput } from "../io.ts";
 import { ffmpeg } from "../proc.ts";
 import { type Ctx, ensureDir, fail, rel, resolvePath } from "../util.ts";
 import { buildAssFromCaptions } from "./captions.ts";
-import { DIALOG_NEEDLES, DIALOG_STATES } from "./timeline.ts";
+import { DIALOG_NEEDLES, DIALOG_STATES, type DialogState } from "./sprite.ts";
 
 export interface GenerateVideoParams {
   input?: string;
@@ -110,8 +110,6 @@ interface TimelineDoc {
   dialogSprites?: TimelineDialogSprites | null;
   captionsStyle?: TimelineCaptionsStyle | null;
 }
-
-type DialogState = (typeof DIALOG_STATES)[number];
 
 function qualityToCrf(q: string): { crf: number; preset: string; audioKbps: string } {
   switch (q) {
