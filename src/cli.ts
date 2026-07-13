@@ -114,7 +114,7 @@ function parseFlags(cmd: CommandSpec, args: string[]): any {
   for (let i = 0; i < args.length; i++) {
     let token = args[i];
 
-    // Trailing / intermixed file paths for commands that opt in (e.g. preview).
+    // Trailing / intermixed file paths for commands that opt in (e.g. generate sheet).
     if (!token.startsWith("-") && cmd.positionals) {
       positionals.push(token);
       continue;

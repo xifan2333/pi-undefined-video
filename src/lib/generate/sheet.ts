@@ -2,7 +2,7 @@
  * uvid generate sheet — images → one contact-sheet image.
  *
  * Multi-image input (positionals / --list) → single image output (-o or stdout).
- * Does not open a viewer — compose with `uvid preview` if you want to look.
+ * Does not open a viewer — use mpv / imv to look at the result.
  *
  * Scaling: omit --cell-width/--cell-height → native pixel size per cell.
  */

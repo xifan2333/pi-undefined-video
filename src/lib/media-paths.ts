@@ -1,5 +1,5 @@
 /**
- * Multi-file path collection + light media typing for preview / generate sheet.
+ * Multi-file path collection + light media typing for generate sheet.
  * Single-file filters still use lib/io.ts.
  */
 import fs from "node:fs";

@@ -36,13 +36,12 @@ import {
   generateTimeline,
   generateVideo,
 } from "./lib/generate/index.ts";
-import { preview } from "./lib/preview.ts";
 import type { Ctx } from "./lib/util.ts";
 
 export interface CommandSpec {
   path: string[];
-  /** analyze | generate | meta */
-  family: "analyze" | "generate" | "meta";
+  /** analyze | generate */
+  family: "analyze" | "generate";
   summary: string;
   description?: string;
   consumes?: string[];
@@ -551,7 +550,7 @@ export const commands: CommandSpec[] = [
       "Generate: ImageMagick montage of stills with per-cell labels (title from filename). " +
       "Does not open a viewer. Cells keep native pixels unless --cell-width/--cell-height. " +
       "CLI: `uvid generate sheet [FILE…] [-o sheet.jpg] [--list paths.txt] [--tile 4x2]`. " +
-      "Compose: `uvid generate sheet a.jpg b.jpg -o s.jpg && uvid preview s.jpg`.",
+      "Use mpv / imv to view the contact sheet.",
     consumes: ["images"],
     produces: ["one contact-sheet image"],
     positionals: true,
@@ -594,33 +593,5 @@ export const commands: CommandSpec[] = [
     run: generateSheet,
   },
 
-  // ── preview (viewer only; no file product) ────────────────────────────
-  {
-    path: ["preview"],
-    family: "meta",
-    summary: "open media: video/audio→mpv, image→imv (no file output)",
-    description:
-      "Human viewer only — no -o, no sheet bake. " +
-      "video/audio → mpv; image(s) → imv. " +
-      "Contact sheet: `uvid generate sheet … -o s.jpg` then `uvid preview s.jpg`. " +
-      "CLI: `uvid preview [FILE…]` or `-i FILE` / `--list paths.txt`.",
-    consumes: ["media files"],
-    produces: ["viewer session"],
-    positionals: true,
-    params: Type.Object({
-      input: Type.Optional(
-        Type.String({ description: "Single input file (optional if positionals / --list)" }),
-      ),
-      paths: Type.Optional(
-        Type.Array(Type.String(), {
-          description: "Additional files (CLI trailing args; tools may pass an array)",
-        }),
-      ),
-      list: Type.Optional(
-        Type.String({ description: "Text file: one path per line (# comments ok)" }),
-      ),
-    }),
-    run: preview,
-  },
 ];
 
