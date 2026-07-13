@@ -55,7 +55,7 @@ CLI and pi tools never drift: both run `CommandSpec.run` in-process.
 
 ## AI-authored files (skill)
 
-Only three creative artifacts: `script.md`, `edit.json` (sparse cuts; `schemas/edit.schema.json`), `bgm.mml`. Everything else is filters or mechanical landing. See `skills/undefined-video/`.
+Only three creative artifacts: `script.md`, `edit.json` (sparse cuts; `skills/undefined-video/schemas/edit.schema.json`), `bgm.mml`. Everything else is filters or mechanical landing. See `skills/undefined-video/`.
 
 ## Directory-level batching
 

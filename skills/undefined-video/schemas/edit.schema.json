@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/xifan2333/pi-undefined-video/schemas/edit.schema.json",
+  "$id": "https://github.com/xifan2333/pi-undefined-video/skills/undefined-video/schemas/edit.schema.json",
   "title": "uvid.edit",
   "description": "Sparse edit intent for an episode. Transcript ids are the base; default is keep. Actions are the only human/AI cut decisions. version 0 = v0.1 contract.",
   "type": "object",

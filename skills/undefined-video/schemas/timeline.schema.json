@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/xifan2333/pi-undefined-video/schemas/timeline.schema.json",
+  "$id": "https://github.com/xifan2333/pi-undefined-video/skills/undefined-video/schemas/timeline.schema.json",
   "title": "uvid.timeline",
   "description": "Compiled geometry from edit.json. basis=aroll is body only; basis=program inserts packaging media and a dialog[] chrome sequence. Optional bgm is timeline-bound audio mixed by generate video. Sparse intent stays in edit; this file is the intermediate geometry product for video/captions/otio.",
   "type": "object",

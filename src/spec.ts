@@ -375,7 +375,7 @@ export const commands: CommandSpec[] = [
       "Parallel multi-args must be equal length: -i / --id / --type / --media (optional --visual). " +
       "Comma-separated or repeated flags. Visual slot '-' means none. " +
       "No script.md parse, no cache layout scan. Does not invent cuts. " +
-      "Re-run preserves each source's actions and other sources. Schema: schemas/edit.schema.json. " +
+      "Re-run preserves each source's actions and other sources. Schema: skills/undefined-video/schemas/edit.schema.json. " +
       "CLI: `uvid generate edit -i a.json,b.json -o edit.json --id 01,02 --type audio,video --media a.mp3,b.mp4`. " +
       "Or single: `… -i a.json --id 01 --type audio --media a.mp3 --visual a.png`.",
     consumes: ["asr.json (+ explicit media paths)"],
