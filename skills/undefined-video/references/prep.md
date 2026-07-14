@@ -136,3 +136,43 @@ Pass when **`|I − (−16)| ≤ 1.0`** and **`peak ≤ −1.5`**.
 - [ ] Every `script.md` media has a `clips/NN.media.<ext>`.
 - [ ] `<audio>` → mp3 (audio only); `<video>` → mp4 (picture kept).
 - [ ] Each product: `|I + 16| ≤ 1.0` and `peak ≤ −1.5`.
+
+## Step 3 — Transcribe each normalized segment (ASR)
+
+**Done means:** every source has `cache/NN.asr.json`, ready to feed `generate edit`.
+
+Use the `jianying-subtitle` plugin (JianYing / CapCut free ASR). Transcribe the
+**normalized** media from Step 2 (`clips/NN.media.*`), not `raw/` — clean audio
+transcribes more accurately and its timeline matches the media compile will use.
+Audio sources (mp3) upload directly; video sources (mp4) have their audio extracted
+automatically.
+
+### Do
+
+Request `json` format — it carries word-level timestamps. The output is a
+`SubtitleSegment[]` (`[{ text, startMs, endMs, words:[{text,startMs,endMs}] }]`),
+which is exactly the ASR shape `generate edit` accepts (zero conversion).
+
+One invocation per file; loop outside. Write to `cache/NN.asr.json`.
+
+```bash
+# CLI (format inferred from the .json extension)
+jianying-subtitle clips/01.media.mp3 -o cache/01.asr.json
+jianying-subtitle clips/02.media.mp4 -o cache/02.asr.json
+```
+```jsonc
+// pi tool: transcribe_media
+{ "input": "clips/01.media.mp3", "output": "cache/01.asr.json", "formats": ["json"] }
+{ "input": "clips/02.media.mp4", "output": "cache/02.asr.json", "formats": ["json"] }
+```
+
+### Accept
+
+- Each `cache/NN.asr.json` is a non-empty array of `{ text, startMs, endMs, words }`.
+- `generate edit -i cache/NN.asr.json …` ingests it without a shape error.
+
+### Checklist
+
+- [ ] Every source has a `cache/NN.asr.json` (json format, word-level).
+- [ ] Transcribed the normalized `clips/NN.media.*`, not `raw/`.
+- [ ] Each file is a `SubtitleSegment[]` that `generate edit` accepts.
