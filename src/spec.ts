@@ -469,7 +469,6 @@ export const commands: CommandSpec[] = [
       input: Type.Optional(
         Type.String({ description: "Markdown file; required for type=markdown (or stdin)" }),
       ),
-      avatar: Type.Optional(Type.String({ description: "Avatar image; required for type=outro" })),
       speakerSprite: Type.Optional(
         Type.String({
           description:

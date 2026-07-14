@@ -10,23 +10,19 @@
 
 ```yaml
 ---
-title: <episode title>
 theme: <theme name, e.g. onedark>
-fps: 25
 ---
 ```
 
 | Key | Rule |
 |---|---|
-| `fps` | **Required**, positive integer |
-| `title` | Optional; default to the first body `#` heading |
-| `theme` | Used by packaging/scene generation when visuals are generated |
+| `theme` | **Required**. Theme name (e.g. onedark) for packaging / scene visuals |
 
 ### Structure
 
 | Element | Rule |
 |---|---|
-| `#` | Episode title, **not** included in TOC |
+| `#` | Episode title = the video's title (title source); **not** included in TOC |
 | `##` | Chapter title, included in TOC |
 | `###`+ | Body headings, not included in TOC |
 | `---` | Separates media blocks; a block containing media is one source block |
@@ -41,9 +37,7 @@ fps: 25
 
 ```markdown
 ---
-title: Example Episode
 theme: onedark
-fps: 25
 ---
 
 # Example Episode
@@ -77,7 +71,7 @@ Talking points...
 
 ## Completion checklist
 
-- [ ] Valid `fps` exists, and `theme` exists when visual packaging is needed.
+- [ ] `theme` exists (required); the episode title is the body `#` heading.
 - [ ] TOC chapters use `##`.
 - [ ] Every media tag points to `raw/NN.ext`.
 - [ ] The TOC formed by `##` headings matches the intended episode structure.

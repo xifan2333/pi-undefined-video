@@ -46,8 +46,8 @@
     </style>
   </head>
   <body>
-    <div id="root" data-theme="__THEME__"
-         data-composition-id="__COMP_ID__"
+    <div id="root" data-theme="{{theme}}"
+         data-composition-id="{{compId}}"
          data-start="0" data-duration="3"
          data-width="1280" data-height="720" data-fps="25">
       <div id="menu"><div id="mtitle">章节</div><div id="rows"><div id="cursor"></div></div></div>
@@ -58,7 +58,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
     <script>
-      const C = __CHAPTERS_JSON__, CUR = __CURRENT__, PREV = __PREVIOUS__, RH = 72;
+      const C = {{chaptersJson}}, CUR = {{current}}, PREV = {{previous}}, RH = 72;
       const rowsEl = document.getElementById("rows"), cursor = document.getElementById("cursor");
       const rows = C.map((name, i) => {
         const r = document.createElement("div");
@@ -112,7 +112,7 @@
       tl.eventCallback("onUpdate", render);
       tl.to({}, { duration: DURATION }, 0);
       render();
-      window.__timelines["__COMP_ID__"] = tl;
+      window.__timelines["{{compId}}"] = tl;
     </script>
   </body>
 </html>

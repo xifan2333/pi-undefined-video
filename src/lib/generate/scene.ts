@@ -36,7 +36,6 @@ export interface GenerateSceneParams {
   theme?: string;
   /** Markdown source for type=markdown (-i / stdin). */
   input?: string;
-  avatar?: string;
   /** Speaker sprite JSON path; type=dialog default: template assets/speaker-sprite.json */
   speakerSprite?: string;
   fps?: number;
@@ -85,10 +84,6 @@ function readIndex(outDir: string): string {
 
 function writeIndex(outDir: string, html: string): void {
   fs.writeFileSync(path.join(outDir, "index.html"), html);
-}
-
-function patchTheme(html: string, theme: string): string {
-  return html.replace(/data-theme="[^"]+"/, `data-theme="${theme}"`);
 }
 
 function watermarkHtml(text: string | null | undefined): string {
@@ -151,20 +146,12 @@ function createDialogScene(
 
 function createIntroScene(outDir: string, theme: string): void {
   materializeTemplate("intro", outDir);
-  writeIndex(outDir, patchTheme(readIndex(outDir), theme));
+  writeIndex(outDir, readIndex(outDir).replaceAll("{{theme}}", escapeHtml(theme)));
 }
 
-function createOutroScene(outDir: string, theme: string, avatar: string, ctx: Ctx): void {
+function createOutroScene(outDir: string, theme: string): void {
   materializeTemplate("outro", outDir);
-  const avatarPath = resolvePath(ctx, avatar);
-  if (!fs.existsSync(avatarPath)) fail(`avatar does not exist: ${avatar}`);
-  copyFileChecked(avatarPath, path.join(outDir, "assets", "avatar.png"));
-  // Prefer caller avatar over template default avator.png.
-  const html = patchTheme(readIndex(outDir), theme).replace(
-    /src="assets\/avator\.png"/g,
-    'src="assets/avatar.png"',
-  );
-  writeIndex(outDir, html);
+  writeIndex(outDir, readIndex(outDir).replaceAll("{{theme}}", escapeHtml(theme)));
 }
 
 function readChapters(p: GenerateSceneParams, ctx: Ctx): string[] {
@@ -214,11 +201,11 @@ function createTocScene(outDir: string, p: GenerateSceneParams, ctx: Ctx): void 
 
   materializeTemplate("toc", outDir);
   let html = readIndex(outDir)
-    .replaceAll("__THEME__", theme)
-    .replaceAll("__COMP_ID__", id)
-    .replaceAll("__CHAPTERS_JSON__", JSON.stringify(chapters))
-    .replaceAll("__CURRENT__", String(current))
-    .replaceAll("__PREVIOUS__", String(previous));
+    .replaceAll("{{theme}}", escapeHtml(theme))
+    .replaceAll("{{compId}}", escapeHtml(id))
+    .replaceAll("{{chaptersJson}}", JSON.stringify(chapters))
+    .replaceAll("{{current}}", String(current))
+    .replaceAll("{{previous}}", String(previous));
   // Replace only the watermark node; keep composition-owned <audio sfx>.
   if (p.watermark != null) {
     html = html.replace(/<div class="watermark">[\s\S]*?<\/div>/, watermarkHtml(p.watermark) || "");
@@ -337,12 +324,7 @@ export async function generateScene(p: GenerateSceneParams, ctx: Ctx): Promise<v
   } else if (type === "intro") {
     createIntroScene(outDir, p.theme || fail("missing required --theme"));
   } else if (type === "outro") {
-    createOutroScene(
-      outDir,
-      p.theme || fail("missing required --theme"),
-      p.avatar || fail("missing required --avatar"),
-      ctx,
-    );
+    createOutroScene(outDir, p.theme || fail("missing required --theme"));
   } else if (type === "toc") {
     createTocScene(outDir, p, ctx);
   } else {
