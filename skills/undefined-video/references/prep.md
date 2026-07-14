@@ -1,5 +1,23 @@
 # Prep — pre-production
 
+**Done means:** packaging visuals under `clips/`, normalized `clips/NN.media.*`,
+and word-level `cache/NN.asr.json` for every source. No sparse edit actions,
+no program packaging.
+
+## Resume / skip (decide before any generate)
+
+Inspect the episode first. For each prep product that already exists and
+passes its accept checklist, **skip regenerate**. If **all** prep products
+for the requested sources are present and valid:
+
+1. Run non-mutating verification only (ffprobe / file shape checks).
+2. Report prep complete.
+3. **Stop** — do not author `edit.json` actions, timeline, or program work.
+
+Only rebuild a product when its upstream input changed or accept failed.
+Do not center a prep reply on a full greenfield command list when the fixture
+is already prep-complete.
+
 ## Step 1 — Prepare fixed assets (packaging visuals)
 
 **Done means:** every packaging visual exists under `clips/` as a valid media file.
@@ -141,13 +159,17 @@ Pass when **`|I − (−16)| ≤ 1.0`** and **`peak ≤ −1.5`**.
 
 **Done means:** every source has `cache/NN.asr.json`, ready to feed `generate edit`.
 
-Use the `jianying-subtitle` plugin (JianYing / CapCut free ASR). Transcribe the
-**normalized** media from Step 2 (`clips/NN.media.*`), not `raw/` — clean audio
-transcribes more accurately and its timeline matches the media compile will use.
-Audio sources (mp3) upload directly; video sources (mp4) have their audio extracted
-automatically.
+Transcribe the **normalized** media from Step 2 (`clips/NN.media.*`), not `raw/` —
+clean audio transcribes more accurately and its timeline matches the media compile
+will use. Audio sources (mp3) upload directly; video sources (mp4) have their audio
+extracted automatically.
 
 ### Do
+
+**In a pi session, prefer the built-in tool `transcribe_media`.**
+Use CLI `jianying-subtitle` (JianYing / CapCut free ASR) when working outside pi
+or when that binary is the installed ASR front-end. Both must write the same shape:
+`SubtitleSegment[]` with word-level timings to `cache/NN.asr.json`.
 
 Request `json` format — it carries word-level timestamps. The output is a
 `SubtitleSegment[]` (`[{ text, startMs, endMs, words:[{text,startMs,endMs}] }]`),
@@ -155,15 +177,15 @@ which is exactly the ASR shape `generate edit` accepts (zero conversion).
 
 One invocation per file; loop outside. Write to `cache/NN.asr.json`.
 
-```bash
-# CLI (format inferred from the .json extension)
-jianying-subtitle clips/01.media.mp3 -o cache/01.asr.json
-jianying-subtitle clips/02.media.mp4 -o cache/02.asr.json
-```
 ```jsonc
-// pi tool: transcribe_media
+// pi tool: transcribe_media (preferred in-session)
 { "input": "clips/01.media.mp3", "output": "cache/01.asr.json", "formats": ["json"] }
 { "input": "clips/02.media.mp4", "output": "cache/02.asr.json", "formats": ["json"] }
+```
+```bash
+# CLI fallback (format inferred from the .json extension)
+jianying-subtitle clips/01.media.mp3 -o cache/01.asr.json
+jianying-subtitle clips/02.media.mp4 -o cache/02.asr.json
 ```
 
 ### Accept

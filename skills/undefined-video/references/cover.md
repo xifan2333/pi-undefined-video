@@ -102,7 +102,10 @@ Agent fills only the **spec shell** (size, safe area, theme hex, title string, t
 
 ## Tool — `codex_generate_image`
 
-Package `pi-codex-image-gen`. Auth: existing **openai-codex** login (`/login` → ChatGPT Plus/Pro). No `OPENAI_API_KEY`. Backend image model: **gpt-image-2**.
+Package `pi-codex-image-gen` / tool `codex_generate_image` (see skill entry
+dependencies). Auth: existing **openai-codex** login (`/login` → ChatGPT Plus/Pro).
+No `OPENAI_API_KEY`. Backend image model: **gpt-image-2**. Final crop still needs
+ImageMagick `magick`.
 
 | Param | Required | Notes |
 |---|---|---|

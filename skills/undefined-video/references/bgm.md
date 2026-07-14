@@ -2,15 +2,17 @@
 
 **This is one of the three AI/human-authored creative files.** The other two are `script.md` and `edit.json`.
 
-You write `bgm.mml`; the tool exports audio:
+You write root `bgm.mml`; the tool exports the bed to **`clips/bgm.mp3`**
+(matches episode layout and `program.md` `--bgm`). Do not leave the only export
+at episode-root `bgm.mp3`.
 
 ```bash
-uvid generate bgm -i bgm.mml -o bgm.mp3 [--duration SEC]
+uvid generate bgm -i bgm.mml -o clips/bgm.mp3 [--duration SEC]
 ```
 
 `--duration` is computed by the caller when the BGM bed must cover a known window. If omitted, the tool exports the MML loop's own length.
 
-**Done means:** `bgm.mml` has a valid shape, and the exported audio duration is at least the required BGM window.
+**Done means:** `bgm.mml` has a valid shape, and `clips/bgm.mp3` duration is at least the required BGM window.
 
 ---
 
@@ -52,7 +54,7 @@ Practical guidance:
 (optional) kept audio duration + script chapter order
   → bgmSec / bars / energy map / loop length
   → write bgm.mml
-  → uvid generate bgm -i bgm.mml -o bgm.mp3 --duration <bgmSec>
+  → uvid generate bgm -i bgm.mml -o clips/bgm.mp3 --duration <bgmSec>
 ```
 
 ---
@@ -141,7 +143,7 @@ TR: o2 l8 [ c c g g c c g g ] x8
 ## Export
 
 ```bash
-uvid generate bgm -i bgm.mml -o bgm.mp3 --duration <bgmSec>
+uvid generate bgm -i bgm.mml -o clips/bgm.mp3 --duration <bgmSec>
 # optional:
 #   -f wav|aac
 #   --sample-rate 48000
@@ -178,4 +180,4 @@ accompaniment: style=… s2mode=… bass=…
 - [ ] If `edit.json` exists, estimate `bgmSec` from kept aroll + TOC duration (intro end → outro start), not raw media / full program.
 - [ ] Work structure-first: bgmSec, energy map, loop length/form, then MML.
 - [ ] `bgm.mml` contains `title`, `tempo`, and either `progression`+S1 or fully handwritten S1+TR.
-- [ ] `uvid generate bgm` creates a file whose duration is at least the required BGM window (intro end → outro start).
+- [ ] `uvid generate bgm` writes `clips/bgm.mp3` with duration ≥ the required BGM window (intro end → outro start).

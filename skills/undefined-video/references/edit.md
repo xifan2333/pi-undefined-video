@@ -133,6 +133,17 @@ Chinese–English boundary always has a space: `命令 ls`, `GNU/Linux 社区`.
 Status advances as you finish each pass:
 `subtitle-draft` → `audio-reviewed` → `video-reviewed` → `ready`.
 
+`ready` is reserved for post-program human sign-off (`references/program.md`).
+Finishing the visual pass and accepting aroll → `video-reviewed`, not `ready`.
+
+**Partial-pass discipline:** a subtitle-only request authors only `stage: "subtitle"`
+speech actions (`replace_text` / turn or word `drop`). Do **not** invent
+`hold_until`, silence range drops, or status jumps. Leave status at
+`subtitle-draft` for that pass. If on-disk `edit.json` already mixes later stages
+(or is `ready`), describe the subtitle contract without rewriting the whole file
+in a dry plan; when applying, either start from a skeleton or touch only subtitle
+actions.
+
 ### 1. Subtitle (`stage: "subtitle"`)
 
 Read `transcript` + script intent. Fix text first, cut media as needed for speech:
@@ -191,6 +202,17 @@ uvid generate frame -i clips/02.media.mp4 --at-ms 21800 -o cache/stills/02_21800
 { "input": "clips/02.media.mp4", "atMs": 21800, "output": "cache/stills/02_21800.jpg" }
 ```
 
+Optional: contact-sheet many stills before deciding holds:
+
+```bash
+uvid generate sheet cache/stills/02_*.jpg -o cache/stills/02.sheet.jpg --tile 4x2
+```
+```jsonc
+// pi: uvid_generate_sheet
+{ "paths": ["cache/stills/02_21800.jpg"], "output": "cache/stills/02.sheet.jpg", "tile": "4x2" }
+```
+Not required; use when stills are numerous.
+
 Resolve provisional holds: shorten `untilMs` to the last informative frame, then
 `drop` the static remainder with `track:"both"` + `stage:"video"`.
 Do **not** add `keep` actions to mark “picture is good”.
@@ -202,7 +224,6 @@ Timeline at **episode root** (media paths resolve from there):
 ```bash
 uvid generate timeline -i edit.json -o timeline.aroll.json
 uvid generate captions -i timeline.aroll.json -o cache/preview.srt -f srt
-uvid generate captions -i timeline.aroll.json -o cache/preview.ass
 uvid generate video -i timeline.aroll.json -o cache/preview.aroll.mp4 --quality draft
 mpv --sub-file=cache/preview.srt cache/preview.aroll.mp4
 ```
@@ -210,11 +231,14 @@ mpv --sub-file=cache/preview.srt cache/preview.aroll.mp4
 // pi tools
 { "input": "edit.json", "output": "timeline.aroll.json" }             // uvid_generate_timeline
 { "input": "timeline.aroll.json", "output": "cache/preview.srt", "format": "srt" }
-{ "input": "timeline.aroll.json", "output": "cache/preview.ass" }
 { "input": "timeline.aroll.json", "output": "cache/preview.aroll.mp4", "quality": "draft" }
 ```
 
-Accept: captions clean (spaces on **ASS and SRT**, no fillers), cuts on pauses,
+Aroll preview is **SRT only** (external sub for cut review). No ASS / no
+`--fg/--bg` theme burn-in here — typewriter style + theme colors belong on the
+program pass (`references/program.md` → `program.ass` + burn-in).
+
+Accept: captions clean (spaces on SRT, no fillers), cuts on pauses,
 V-only holds only where the screen still informs, duration matches intent.
 Fix by editing `actions` and regenerating — never hand-patch the mp4.
 
@@ -224,9 +248,9 @@ Aroll is the body-cut review path. Packaging → final deliverable is
 ### Checklist
 
 - [ ] Subtitle: word-level replace/drop done; meta turns confirmed or dropped.
-- [ ] CJK–Latin spaces live on word surfaces; ASS karaoke shows them.
+- [ ] CJK–Latin spaces live on word surfaces (program ASS karaoke will show them).
 - [ ] Audio: lead/trail/internal non-speech decided; long gaps held or dropped.
 - [ ] Video: every hold justified by picture info; static tails dropped.
-- [ ] `timeline.aroll.json` at root; preview mp4 + srt/ass reviewed in mpv.
-- [ ] No unresolved `check`; then package per `program.md` and set `status: ready` after human sign-off.
+- [ ] `timeline.aroll.json` at root; preview mp4 + `cache/preview.srt` reviewed in mpv.
+- [ ] No unresolved `check`; aroll accepted → `status: video-reviewed`; then package per `program.md`. Set `status: ready` only after program (and cover if requested) human sign-off.
 
