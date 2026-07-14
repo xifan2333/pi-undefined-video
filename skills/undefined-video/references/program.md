@@ -99,3 +99,4 @@ mpv program.mp4
 - [ ] ASS typewriter shows spaces at CJK–Latin boundaries (not only SRT).
 - [ ] Dialog sprite + BGM present under speech; hidden/silent on packaging if designed so.
 - [ ] Human reviewed `program.mp4` in mpv; then `edit.json` `status: ready`.
+- [ ] Cover: `cover.png` per `references/cover.md` (theme palette + title + 1146×717).

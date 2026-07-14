@@ -29,6 +29,7 @@ One episode = one directory. The root holds only what cannot be regenerated
 │
 ├── timeline.aroll.json   timeline.program.json  # compiled timeline (root; media paths resolve here)
 ├── program.mp4   program.ass   program.otio    # deliverables (root)
+├── cover.png                                   # B 站封面 (root)
 │
 ├── clips/                                      # media referenced by otio/video → must persist
 │   ├── 01.media.mp3   01.visual.png
@@ -65,4 +66,6 @@ One episode = one directory. The root holds only what cannot be regenerated
 | Edit skeleton + sparse actions + aroll review | `references/edit.md` |
 | BGM composition | `references/bgm.md` |
 | Packaging → `program.mp4` | `references/program.md` |
+| Cover (B 站 + theme palette) | `references/cover.md` |
+| Theme tokens (scenes + cover) | `assets/themes.css` |
 | Machine contracts | `schemas/edit.schema.json`, `schemas/timeline.schema.json` |
