@@ -373,15 +373,36 @@ function buildReplaceMap(src: EditSource): Map<string, string> {
       turnLevel.add(a.target);
     }
   }
+  // Word-level edits change the display text too: a word-level drop removes that
+  // word's surface, a word-level replace substitutes it. Rebuild each touched
+  // turn from its word sequence so caption text stays in sync with the kept,
+  // replaced words (and joinedWordText(words) matches turnText → no re-tokenize).
+  const droppedWords = new Set<string>();
+  for (const a of src.actions || []) {
+    if (a.op !== "drop") continue;
+    const tgts = Array.isArray(a.target) ? a.target : [a.target];
+    for (const tg of tgts) if (typeof tg === "string" && words.has(tg)) droppedWords.add(tg);
+  }
+  const wordReplace = new Map<string, string>();
   for (const a of src.actions || []) {
     if (a.op !== "replace_text" || !a.text) continue;
-    if (typeof a.target === "string" && words.has(a.target)) {
-      const turnId = a.target.replace(/-w\d+$/, "");
-      if (turnLevel.has(turnId)) continue;
-      const w = words.get(a.target)!;
-      const old = m.get(turnId) ?? turns.get(turnId)?.text ?? "";
-      m.set(turnId, old.replace(w.text, a.text));
-    }
+    if (typeof a.target !== "string" || !words.has(a.target)) continue;
+    const turnId = a.target.replace(/-w\d+$/, "");
+    if (turnLevel.has(turnId)) continue;
+    wordReplace.set(a.target, a.text);
+  }
+  const touched = new Set<string>();
+  for (const id of droppedWords) touched.add(id.replace(/-w\d+$/, ""));
+  for (const id of wordReplace.keys()) touched.add(id.replace(/-w\d+$/, ""));
+  for (const turnId of touched) {
+    if (turnLevel.has(turnId)) continue;
+    const t = turns.get(turnId);
+    if (!t || !t.words) continue;
+    const rebuilt = t.words
+      .filter((w) => !droppedWords.has(w.id))
+      .map((w) => wordReplace.get(w.id) ?? w.text)
+      .join("");
+    m.set(turnId, rebuilt);
   }
   return m;
 }
