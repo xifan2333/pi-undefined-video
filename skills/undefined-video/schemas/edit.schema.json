@@ -209,7 +209,7 @@
           }
         }
       ],
-      "description": "Remove target from selected track(s). Does not change display text."
+      "description": "Remove target from selected track(s). Word-level drop also removes that word from caption text/words (no re-tokenize). Turn/range drop does not rewrite text by itself."
     },
     "actionKeep": {
       "allOf": [

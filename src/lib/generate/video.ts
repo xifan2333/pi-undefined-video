@@ -451,6 +451,7 @@ export async function generateVideo(p: GenerateVideoParams, ctx: Ctx): Promise<v
   const filter = vf(width, height, fps);
 
   const timelineAbs = input.path ?? resolvePath(ctx, "timeline.json");
+  // Timeline lives at episode root next to edit.json; media paths resolve from there.
   const baseDir = path.dirname(timelineAbs);
   const basis = (tl.basis || "aroll").toLowerCase();
   const dialogCues = Array.isArray(tl.dialog) ? tl.dialog : [];

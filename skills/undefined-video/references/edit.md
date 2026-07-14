@@ -84,7 +84,147 @@ uvid generate edit \
 - [ ] `media` points at the normalized `clips/NN.media.*`; `asr` at `cache/NN.asr.json`.
 - [ ] `actions` empty — the skeleton is ready to edit.
 
-## Editing — adding actions
+## Actions contract
 
-> TBD — the sparse action set (drop / replace_text / hold_until / check) and how to
-> apply cuts. Written after the editing pass is verified end-to-end.
+Sparse only: default is keep. Each action:
+
+| field | role |
+|---|---|
+| `id` | unique in source, e.g. `a02-007` |
+| `op` | `drop` \| `keep` \| `replace_text` \| `hold_until` \| `check` |
+| `target` | unit id / id[] / `{startMs,endMs}` (source media axis) |
+| `track` | `audio` \| `video` \| `both` (default `audio`; `hold_until` is `video`) |
+| `stage` | `subtitle` \| `audio` \| `video` — which pass authored it |
+| `kind` | open string; prefer `filler` `repetition` `false_start` `mistake` `asr_error` `pause` `visual_action` |
+| `reason` / `evidence` | human note + optional freeform pointers |
+
+### Compile model (`generate timeline`)
+
+```
+audio_kept = invert(audio drops − keeps)
+video_kept = (audio_kept ∪ hold_until) − video drops
+```
+
+Lead / trail / inter-turn gaps **stay** unless you drop them. Captions ride on
+kept speech only.
+
+| op | effect |
+|---|---|
+| `drop` unit | cut media for `track`; **word-level drop also removes that word from caption text/words** (no re-tokenize) |
+| `drop` range | cut that media window on `track` |
+| `replace_text` | text layer only; **always word-level** so karaoke `\k` timings stay |
+| `hold_until` | keep **video** from target speech start through `untilMs` while audio may be silent |
+| `keep` | subtract from drops — **do not** use it to “save picture across an audio drop” (it re-admits dropped speech+captions). Use `hold_until` |
+| `check` | unresolved flag; blocks `status: ready` |
+
+### Granularity
+
+- **Word-level:** fillers (`嗯`/`呃`), ASR fixes, CJK↔Latin spacing (embed the space in the English word, e.g. `" ls"`, `"Cheat Sheet"`, `"GNU/Linux "`).
+- **Turn-level `drop`:** residual / meta / false-start sentences with no useful words.
+- **Never turn-level `replace_text`** unless you also author `words[]` (reuses ASR starts/ends). Prefer word replace.
+- Creative whole-turn drops (meta openers you *might* keep as bridges) → propose, human confirms. Objective typos/fillers → apply directly.
+
+Chinese–English boundary always has a space: `命令 ls`, `GNU/Linux 社区`.
+
+## Edit pass order
+
+Status advances as you finish each pass:
+`subtitle-draft` → `audio-reviewed` → `video-reviewed` → `ready`.
+
+### 1. Subtitle (`stage: "subtitle"`)
+
+Read `transcript` + script intent. Fix text first, cut media as needed for speech:
+
+1. Word-level `replace_text` (typos, casing, CJK–Latin spaces).
+2. Word-level `drop` fillers.
+3. Turn-level `drop` residual / pure-meta sentences (creative ones: confirm first).
+
+Do **not** invent silence cuts here — only speech units.
+
+### 2. Audio re-verify (`stage: "audio"`)
+
+Evidence (stdout by default):
+
+```bash
+# CLI — pipe waveform → silence (≥400ms typical)
+uvid analyze waveform -i clips/02.media.mp4 | uvid analyze silence --min-ms 400
+```
+```jsonc
+// pi: uvid_analyze_waveform then uvid_analyze_silence
+{ "input": "clips/02.media.mp4" }
+{ "input": "<waveform.json>", "minMs": 400 }
+```
+
+Use silence to:
+
+1. Confirm cut edges land in pauses.
+2. Inventory **long silences** (lead / internal / trail) as candidates for the visual pass — long quiet is evidence about whether the **picture** still carries info, not just hygiene.
+3. Drop pure non-speech windows you never want:
+   - audio sources / empty picture: `track:"both"` range drop
+   - video sources with possible on-screen info: `track:"audio"` range drop + `hold_until` on the last kept word so picture stays for step 3
+
+Trail silence after the last kept turn is already excluded by the kept-turn model; internal long gaps are the important ones.
+
+### 3. Visual re-verify (`stage: "video"`)
+
+**Principle — information compare, picture first:**
+
+| picture | sound | action |
+|---|---|---|
+| info | info | keep both |
+| none | none | `drop` both |
+| info | none | drop audio, keep picture (`hold_until`) |
+| none | info | keep sound; **supplement picture** (usually a `script.md` design gap) |
+
+For each held long gap: sample stills (and optional `frame-diff`) and decide.
+
+```bash
+uvid analyze frame-diff -i clips/02.media.mp4 --from-ms 21650 --to-ms 31936
+# stills at candidate times:
+uvid generate frame -i clips/02.media.mp4 --at-ms 21800 -o cache/stills/02_21800.jpg
+```
+```jsonc
+// pi: uvid_analyze_frame_diff / uvid_generate_frame
+{ "input": "clips/02.media.mp4", "fromMs": 21650, "toMs": 31936 }
+{ "input": "clips/02.media.mp4", "atMs": 21800, "output": "cache/stills/02_21800.jpg" }
+```
+
+Resolve provisional holds: shorten `untilMs` to the last informative frame, then
+`drop` the static remainder with `track:"both"` + `stage:"video"`.
+Do **not** add `keep` actions to mark “picture is good”.
+
+### 4. Rough cut + human review
+
+Timeline at **episode root** (media paths resolve from there):
+
+```bash
+uvid generate timeline -i edit.json -o timeline.aroll.json
+uvid generate captions -i timeline.aroll.json -o cache/preview.srt -f srt
+uvid generate captions -i timeline.aroll.json -o cache/preview.ass
+uvid generate video -i timeline.aroll.json -o cache/preview.aroll.mp4 --quality draft
+mpv --sub-file=cache/preview.srt cache/preview.aroll.mp4
+```
+```jsonc
+// pi tools
+{ "input": "edit.json", "output": "timeline.aroll.json" }             // uvid_generate_timeline
+{ "input": "timeline.aroll.json", "output": "cache/preview.srt", "format": "srt" }
+{ "input": "timeline.aroll.json", "output": "cache/preview.ass" }
+{ "input": "timeline.aroll.json", "output": "cache/preview.aroll.mp4", "quality": "draft" }
+```
+
+Accept: captions clean (spaces, no fillers), cuts on pauses, V-only holds only
+where the screen still informs, duration matches intent. Fix by editing
+`actions` and regenerating — never hand-patch the mp4.
+
+When packaging (intro/toc/outro/bgm/dialog) is wired on `generate timeline`,
+output `timeline.program.json` and render that instead; aroll is the body cut
+review path.
+
+### Checklist
+
+- [ ] Subtitle: word-level replace/drop done; meta turns confirmed or dropped.
+- [ ] Audio: lead/trail/internal non-speech decided; long gaps held or dropped.
+- [ ] Video: every hold justified by picture info; static tails dropped.
+- [ ] `timeline.aroll.json` at root; preview mp4 + srt reviewed in mpv.
+- [ ] No unresolved `check`; status → `ready` only after human sign-off.
+

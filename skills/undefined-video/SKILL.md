@@ -27,7 +27,8 @@ One episode = one directory. The root holds only what cannot be regenerated
 ├── script.md   edit.json   bgm.mml           # authored artifacts   ┐ tracked
 ├── raw/NN.ext                                 # captured source (NN = source id) ┘
 │
-├── program.mp4   program.ass   program.otio   # deliverables (root)
+├── timeline.aroll.json   timeline.program.json  # compiled timeline (root; media paths resolve here)
+├── program.mp4   program.ass   program.otio    # deliverables (root)
 │
 ├── clips/                                      # media referenced by otio/video → must persist
 │   ├── 01.media.mp3   01.visual.png
@@ -37,9 +38,9 @@ One episode = one directory. The root holds only what cannot be regenerated
 │
 └── cache/                                      # intermediate files read by a later -i → regenerable
     ├── 01.asr.json
-    ├── timeline.program.json  timeline.aroll.json
     ├── scenes/
-    └── [optional] 01.silence.json …
+    ├── preview.aroll.mp4  preview.srt  preview.ass
+    └── [optional] stills / silence dumps …
 ```
 
 `.gitignore` is one line: `clips/ cache/`.
@@ -51,6 +52,6 @@ One episode = one directory. The root holds only what cannot be regenerated
 
 | Kind | Examples | On disk? |
 |---|---|---|
-| Input to a downstream command | `asr.json` (→ edit), `timeline.*.json` (→ video/captions/otio) | Yes — read by `-i` |
+| Input to a downstream command | `asr.json` (→ edit), root `timeline.*.json` (→ video/captions/otio) | Yes — read by `-i` |
 | Media referenced at render time | normalized voice, clips, bgm, dialog, visual | Yes — external reference |
 | One-shot decision evidence | `analyze loudness/waveform/silence/frame-diff` | No by default — pipe it |
