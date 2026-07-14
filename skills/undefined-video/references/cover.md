@@ -63,6 +63,23 @@ Quick table (bg / fg / link / ok / warn / magenta):
 
 **Palette is a hard lock, not a vibe.** Models drift (pure black canvas, pure white title). In the prompt: state exact hex, forbid pure black/white when the theme is not those colors, and re-check after render. Prefer regenerate with a tighter brief over heavy remaps.
 
+## Title type (soft reference — do not over-lock)
+
+Episode UI fonts from `assets/themes.css` (same as intro/toc/dialog):
+
+| Role | Font |
+|---|---|
+| Display / titles | `Uranus Pixel 11Px` |
+| Body / mono | `Fusion Pixel 12px M zh_hans` |
+| Caption | `BoutiqueBitmap7x7 1.7` |
+
+These are a **taste reference**, not a hard prompt lock.
+
+- Prefer title lettering that **fits the human style** (pixel game → chunky game-title CJK; flat poster → bold poster type; etc.).
+- Do **not** paste long font-engineering text into the image prompt (no “exact Uranus Pixel path / 8-bit stroke grid / no anti-alias” essays). That over-constrains the model and often yields ugly pseudo-黑体.
+- One short line is enough, e.g. `title lettering: bold chunky pixel game-title CJK, same energy as Uranus Pixel` — or omit if style already implies it.
+- Hard locks stay: **verbatim title string**, **theme hex**, **safe area**, **thumbnail legible**.
+
 ## Human brief（创意层 — 必须有）
 
 Before calling the image tool, collect (or wait for) a short brief:
@@ -107,6 +124,8 @@ Package `pi-codex-image-gen`. Auth: existing **openai-codex** login (`/login` �
 
 ### Prompt assembly
 
+Keep the prompt short. Spec shell + human style/content + title + palette. Optional one-line type mood — no font name laundry list.
+
 ```text
 Asset type: Bilibili cover, landscape ~1536x1024, final crop 1146x717
 Safe area: main title and subject in center 80%; margins from edges
@@ -116,10 +135,12 @@ Theme palette lock (<theme> hex only):
 Text (verbatim, only required readable line): "<# title from script>"
 Style (from human): <…>
 Content (from human): <…>
+Title type (optional one line): <mood matching style, e.g. chunky pixel game title>
 Constraints: thumbnail-legible title; no watermark; no extra slogans unless human asked
 ```
 
 Do **not** prepend a stock “pixel terminal / file manager” concept unless the human asked for it.
+Do **not** over-specify font engineering in the prompt.
 
 ### Call shape
 
