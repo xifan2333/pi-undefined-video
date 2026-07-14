@@ -55,3 +55,14 @@ One episode = one directory. The root holds only what cannot be regenerated
 | Input to a downstream command | `asr.json` (→ edit), root `timeline.*.json` (→ video/captions/otio) | Yes — read by `-i` |
 | Media referenced at render time | normalized voice, clips, bgm, dialog, visual | Yes — external reference |
 | One-shot decision evidence | `analyze loudness/waveform/silence/frame-diff` | No by default — pipe it |
+
+## Pipeline (references)
+
+| Stage | Doc |
+|---|---|
+| Script contract | `references/script.md` |
+| Prep: packaging assets → normalize → ASR | `references/prep.md` |
+| Edit skeleton + sparse actions + aroll review | `references/edit.md` |
+| BGM composition | `references/bgm.md` |
+| Packaging → `program.mp4` | `references/program.md` |
+| Machine contracts | `schemas/edit.schema.json`, `schemas/timeline.schema.json` |

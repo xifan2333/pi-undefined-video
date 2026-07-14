@@ -119,12 +119,14 @@ kept speech only.
 
 ### Granularity
 
-- **Word-level:** fillers (`嗯`/`呃`), ASR fixes, CJK↔Latin spacing (embed the space in the English word, e.g. `" ls"`, `"Cheat Sheet"`, `"GNU/Linux "`).
+- **Word-level:** fillers (`嗯`/`呃`), ASR fixes, CJK↔Latin spacing (embed the space **on the English word surface**, e.g. `" ls"`, `" ls -a"`, `"Cheat"`+`" Sheet "`, `" GNU/Linux "`).
 - **Turn-level `drop`:** residual / meta / false-start sentences with no useful words.
-- **Never turn-level `replace_text`** unless you also author `words[]` (reuses ASR starts/ends). Prefer word replace.
+- **Never turn-level `replace_text`** unless you also author `words[]` (reuses ASR starts/ends). Prefer word replace — turn-level replace without `words[]` re-tokenizes and redistributes karaoke time.
 - Creative whole-turn drops (meta openers you *might* keep as bridges) → propose, human confirms. Objective typos/fillers → apply directly.
 
 Chinese–English boundary always has a space: `命令 ls`, `GNU/Linux 社区`.
+
+**ASS typewriter paints `words[]`, not `text`.** SRT can look correct while ASS has no spaces if word surfaces lost them. After subtitle edits, confirm `join(words[].text) === caption.text` (timeline keeps this when replaces stay word-level).
 
 ## Edit pass order
 
@@ -212,19 +214,19 @@ mpv --sub-file=cache/preview.srt cache/preview.aroll.mp4
 { "input": "timeline.aroll.json", "output": "cache/preview.aroll.mp4", "quality": "draft" }
 ```
 
-Accept: captions clean (spaces, no fillers), cuts on pauses, V-only holds only
-where the screen still informs, duration matches intent. Fix by editing
-`actions` and regenerating — never hand-patch the mp4.
+Accept: captions clean (spaces on **ASS and SRT**, no fillers), cuts on pauses,
+V-only holds only where the screen still informs, duration matches intent.
+Fix by editing `actions` and regenerating — never hand-patch the mp4.
 
-When packaging (intro/toc/outro/bgm/dialog) is wired on `generate timeline`,
-output `timeline.program.json` and render that instead; aroll is the body cut
-review path.
+Aroll is the body-cut review path. Packaging → final deliverable is
+`references/program.md` (`timeline.program.json` + `program.mp4`).
 
 ### Checklist
 
 - [ ] Subtitle: word-level replace/drop done; meta turns confirmed or dropped.
+- [ ] CJK–Latin spaces live on word surfaces; ASS karaoke shows them.
 - [ ] Audio: lead/trail/internal non-speech decided; long gaps held or dropped.
 - [ ] Video: every hold justified by picture info; static tails dropped.
-- [ ] `timeline.aroll.json` at root; preview mp4 + srt reviewed in mpv.
-- [ ] No unresolved `check`; status → `ready` only after human sign-off.
+- [ ] `timeline.aroll.json` at root; preview mp4 + srt/ass reviewed in mpv.
+- [ ] No unresolved `check`; then package per `program.md` and set `status: ready` after human sign-off.
 

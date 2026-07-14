@@ -64,7 +64,7 @@ Practical guidance:
 ```text
 title: <episode title>
 tempo: 128
-progression: [Cmaj7 Am7 Dm7 G7]x2 [Fmaj7 Em7 Dm7 G7] [Cmaj7 Am7 Dm7 G7]
+progression: [Cmaj7 Am7 Dm7 G7]x2 Fmaj7 Em7 Dm7 G7 Cmaj7 Am7 Dm7 G7
 style: drive
 s2mode: thirds
 bass: walk
@@ -72,13 +72,16 @@ swing: 0.45
 S1: o5 l8 e r e g a4 r4 g e c r d4 r4 ...
 ```
 
+`progression` only expands `[…]xN` / `[…]N`. A bare `[Fmaj7 Em7 …]` group is **not**
+stripped — write plain chord tokens, or always use an `xN` loop.
+
 Division of labor: you write the creative layer — progression, melody, and structure. The engine writes the craft layer — accompaniment. Missing S2/TR/NO channels are generated from `progression` and style options. Handwriting any channel overrides generation for that channel. S1 is never generated.
 
 | Key | Meaning |
 |---|---|
 | `title` | Song title |
 | `tempo` | BPM, integer |
-| `progression` | Chord progression; each chord token is one bar; supports `[…]xN`; loops if shorter than melody |
+| `progression` | Chord progression; each chord token is one bar; `[…]xN` / `[…]N` loops only (no bare `[…]`); loops if shorter than melody |
 | `style` | `drive` / `chill` / `tense` |
 | `s2mode` | `arp` / `echo` / `thirds` |
 | `bass` | `root` / `walk` |
