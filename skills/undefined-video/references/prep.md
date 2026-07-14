@@ -1,6 +1,86 @@
 # Prep — pre-production
 
-## Step 1 — Loudness-normalize every script media
+## Step 1 — Prepare fixed assets (packaging visuals)
+
+**Done means:** every packaging visual exists under `clips/` as a valid media file.
+These are "fixed" — they depend on `script.md` only, not on any cut decision, so
+they can be built as soon as the script is final. Durations are owned by the
+templates / held later by `generate timeline`; this step only produces the assets.
+
+Scene projects go to `cache/scenes/` (disposable); rendered products go to `clips/`.
+Each asset is two commands: `generate scene` → a HyperFrames project dir, then
+`generate render` → the media. `--theme` comes from the script frontmatter.
+
+### Do
+
+**intro / outro** — one per episode, fixed brand cards:
+
+```bash
+uvid generate scene  --type intro --theme onedark -o cache/scenes/intro
+uvid generate render -i cache/scenes/intro -o clips/intro.mp4
+uvid generate scene  --type outro --theme onedark -o cache/scenes/outro   # default avatar
+uvid generate render -i cache/scenes/outro -o clips/outro.mp4
+```
+
+**toc** — one clip per `##` chapter. Pass the full chapter list every time;
+`--current` (0-based) selects which row is highlighted:
+
+```bash
+CH='终端与 ls,ls 结合 grep,Cheat Sheet 补充'
+uvid generate scene  --type toc --theme onedark --chapters "$CH" --current 0 -o cache/scenes/toc1
+uvid generate render -i cache/scenes/toc1 -o clips/toc1.mp4
+# repeat --current 1 → toc2, --current 2 → toc3
+```
+
+**markdown pictures** — one per `<audio>` source; this is that source's
+`source.visual`. The body is the markdown **after** the `<audio>` tag up to the
+next `---`, excluding the block's leading `#`/`##` heading (headings are title /
+chapter, not picture). Render a **png still** (held to the audio's length later):
+
+```bash
+# write the sliced body to cache/md-body/NN.md, then:
+uvid generate scene  --type markdown --theme onedark -i cache/md-body/01.md -o cache/scenes/md-01
+uvid generate render -i cache/scenes/md-01 -o clips/01.visual.png -f png
+```
+
+**dialog** — one sprite set per episode (4 named RGBA stills for the talking-head chrome):
+
+```bash
+uvid generate scene  --type dialog --theme onedark -o cache/scenes/dialog
+uvid generate render -i cache/scenes/dialog -o clips/dialog -f sprite
+```
+
+pi-tool forms (params are camelCase; `-f` → `format`, sprite/png set via `format`):
+
+```jsonc
+// uvid_generate_scene
+{ "type": "intro",    "theme": "onedark", "output": "cache/scenes/intro" }
+{ "type": "outro",    "theme": "onedark", "output": "cache/scenes/outro" }
+{ "type": "toc",      "theme": "onedark", "chapters": "a,b,c", "current": 0, "output": "cache/scenes/toc1" }
+{ "type": "markdown", "theme": "onedark", "input": "cache/md-body/01.md", "output": "cache/scenes/md-01" }
+{ "type": "dialog",   "theme": "onedark", "output": "cache/scenes/dialog" }
+// uvid_generate_render
+{ "input": "cache/scenes/intro", "output": "clips/intro.mp4" }
+{ "input": "cache/scenes/md-01", "output": "clips/01.visual.png", "format": "png" }
+{ "input": "cache/scenes/dialog", "output": "clips/dialog", "format": "sprite" }
+```
+
+### Accept
+
+No `analyze` for images — use `ffprobe`:
+
+- intro / outro / toc `.mp4`: has a video stream and `duration > 0`.
+- markdown `.visual.png`: a valid image (expected 1280×720).
+- dialog: all four exist — `idle.png`, `talk-closed.png`, `talk-open.png`, `wait-on.png` (RGBA).
+
+### Checklist
+
+- [ ] `clips/intro.mp4` and `clips/outro.mp4` exist (video + duration).
+- [ ] One `clips/tocN.mp4` per `##`, highlighting the right chapter.
+- [ ] One `clips/NN.visual.png` per `<audio>` source (heading excluded from body).
+- [ ] `clips/dialog/` holds the four RGBA sprite stills.
+
+## Step 2 — Loudness-normalize every script media
 
 **Done means:** every media referenced by `script.md` has a normalized product at
 `clips/NN.media.<ext>`, and each product passes the loudness acceptance check.
