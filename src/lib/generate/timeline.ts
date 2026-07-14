@@ -448,12 +448,26 @@ function joinedWordText(words: CaptionWord[]): string {
 /**
  * Split an edited turn into word-like tokens for karaoke + mouth timing.
  * Prefer whitespace tokens; otherwise group CJK/latin runs.
+ * Internal spaces are kept on the following token (e.g. "命令 ls" → ["命令", " ls"])
+ * so CJK↔Latin boundaries survive ASS typewriter (which paints words[], not text).
  */
 function tokenizeCaptionText(text: string): string[] {
   const raw = String(text || "").trim();
   if (!raw) return [];
   if (/\s/.test(raw)) {
-    return raw.split(/\s+/).filter(Boolean);
+    const parts = raw.split(/(\s+)/);
+    const out: string[] = [];
+    let pendingSpace = "";
+    for (const part of parts) {
+      if (!part) continue;
+      if (/^\s+$/.test(part)) {
+        pendingSpace += part;
+        continue;
+      }
+      out.push(pendingSpace + part);
+      pendingSpace = "";
+    }
+    return out.length ? out : [raw];
   }
   // No spaces: split into CJK chars / latin|digit runs / other single glyphs.
   const out: string[] = [];
@@ -667,7 +681,12 @@ async function compileSource(
       if ((t.words || []).some((w) => w.id === a.target)) wordReplace.set(a.target, a.text);
     }
     const turnText = replaceMap.get(t.id) ?? t.text;
-    const turnLevelReplace = replaceMap.has(t.id) && replaceMap.get(t.id) !== t.text;
+    // Only true turn-level replace_text (target = turn id). Word-level replaces also
+    // change replaceMap[turnId] via rebuild — that must NOT force re-tokenize, or the
+    // embedded CJK↔Latin spaces on word surfaces are stripped before ASS karaoke.
+    const turnLevelReplace = (src.actions || []).some(
+      (a) => a.op === "replace_text" && typeof a.target === "string" && a.target === t.id,
+    );
     const authoredWords = replaceWordsMap.get(t.id);
 
     const projectWords = (
@@ -704,10 +723,15 @@ async function compileSource(
       const words = projectWords(t.words || [], (w) =>
         w.id && wordReplace.has(w.id) ? wordReplace.get(w.id)! : w.text,
       );
+      // Prefer exact surface match (spaces included) so word-level replace_text
+      // like " ls" / "Cheat Sheet" keeps karaoke timing + visible spaces.
+      const exactJoin = words.map((w) => w.text).join("");
       finalWords =
-        turnLevelReplace || joinedWordText(words) !== normalizeCaptionSurface(turnText)
-          ? rebuildWordsFromTurnText(turnText, cueStart, cueEnd, words)
-          : words;
+        exactJoin === turnText
+          ? words
+          : turnLevelReplace || joinedWordText(words) !== normalizeCaptionSurface(turnText)
+            ? rebuildWordsFromTurnText(turnText, cueStart, cueEnd, words)
+            : words;
     }
 
     captions.push({
