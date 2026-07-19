@@ -1319,7 +1319,7 @@ export async function generateTimeline(p: GenerateTimelineParams, ctx: Ctx): Pro
             // loop to cover the BGM window when bed is shorter
             loop: true,
             // bed under dialog; default bed level
-            volume: 0.22,
+            volume: 0.3,
           };
         })()
       : null,
@@ -1362,7 +1362,7 @@ export async function generateTimeline(p: GenerateTimelineParams, ctx: Ctx): Pro
               bgmMs: bgmClip.durationMs,
               bgmStartMs: win.startMs,
               bgmEndMs: win.endMs,
-              bgmVolume: 0.22,
+              bgmVolume: 0.3,
               bgmLoop: true,
             };
           })()

@@ -78,9 +78,11 @@ bgmSec ≈ aroll.durationMs/1000 + sum(toc durations)
 ```
 
 ```jsonc
-// uvid_generate_bgm
+// uvid_generate_bgm — defaults: lufs=-36, tp=-9, lra=11 (see bgm.md loudness stack)
 { "input": "<EPISODE>/bgm.mml", "output": "<EPISODE>/clips/bgm.mp3", "duration": 62 }
 ```
+
+Program timeline binds the bed with **`bgm.volume` default 0.3** (mix under −16 LUFS voice).
 
 ## 2. Program timeline
 
@@ -120,17 +122,17 @@ duration or visual paths.
 ## 3. Captions + render
 
 ```jsonc
-// uvid_generate_captions
+// uvid_generate_captions — basename must match the video (mpv auto-loads program.srt / program.ass)
 { "input": "<EPISODE>/timeline.program.json", "output": "<EPISODE>/program.srt", "format": "srt" }
 { "input": "<EPISODE>/timeline.program.json", "output": "<EPISODE>/program.ass", "fg": "#abb2bf", "bg": "#282c34" }
 // uvid_generate_video
 { "input": "<EPISODE>/timeline.program.json", "output": "<EPISODE>/program.mp4", "quality": "standard" }
 // optional NLE export — uvid_generate_otio
 { "input": "<EPISODE>/timeline.program.json", "output": "<EPISODE>/program.otio" }
-// then review externally: mpv program.mp4
+// then review: mpv program.mp4  (sidecars program.srt / program.ass load by stem)
 ```
 
-`uvid_generate_video` reads **only** the timeline (segments, dialog, bgm, captionsStyle). No side asset flags. Preview path stays `cache/preview.*`; deliverables stay at root.
+`uvid_generate_video` reads **only** the timeline (segments, dialog, bgm, captionsStyle). No side asset flags. Preview path stays `cache/preview.aroll.*` (same stem for mp4 + srt); deliverables stay at root as `program.mp4` + `program.srt` / `program.ass`.
 
 ### Checklist
 

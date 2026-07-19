@@ -491,7 +491,7 @@ export async function generateVideo(p: GenerateVideoParams, ctx: Ctx): Promise<v
   const tlBgm = tl.bgm && typeof tl.bgm === "object" ? tl.bgm : null;
   let bgmAbs: string | null = null;
   let bgmLoop = true;
-  let bgmVolume = 0.22;
+  let bgmVolume = 0.3;
   // Window defaults: full program (legacy). Timeline compile writes intro-end → outro-start.
   let bgmStartMs = 0;
   let bgmEndMs = durationMs;
@@ -500,7 +500,7 @@ export async function generateVideo(p: GenerateVideoParams, ctx: Ctx): Promise<v
     if (!fs.existsSync(bgmAbs)) fail(`timeline.bgm.media not found: ${tlBgm.media}`);
     bgmLoop = tlBgm.loop !== false;
     bgmVolume =
-      tlBgm.volume != null && Number.isFinite(tlBgm.volume) ? Number(tlBgm.volume) : 0.22;
+      tlBgm.volume != null && Number.isFinite(tlBgm.volume) ? Number(tlBgm.volume) : 0.3;
     if (bgmVolume < 0 || bgmVolume > 1) fail(`timeline.bgm.volume must be 0..1, got ${bgmVolume}`);
     if (tlBgm.startMs != null && Number.isFinite(tlBgm.startMs)) bgmStartMs = Math.trunc(tlBgm.startMs);
     if (tlBgm.endMs != null && Number.isFinite(tlBgm.endMs)) bgmEndMs = Math.trunc(tlBgm.endMs);

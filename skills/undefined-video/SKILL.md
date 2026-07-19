@@ -163,7 +163,7 @@ deliverables; rebuildable media stays under `clips/` / `cache/`.
 ├── raw/NN.ext                                 # captured   ┘
 │
 ├── timeline.aroll.json   timeline.program.json
-├── program.mp4   program.ass   program.otio
+├── program.mp4   program.srt   program.ass   program.otio   # captions stem = video stem (mpv)
 ├── cover.png
 │
 ├── clips/                    # persist: referenced at render time
@@ -175,7 +175,7 @@ deliverables; rebuildable media stays under `clips/` / `cache/`.
 └── cache/                    # regenerable intermediates
     ├── NN.asr.json
     ├── scenes/
-    ├── preview.aroll.mp4  preview.srt   # aroll: SRT only; ASS is program-pass
+    ├── preview.aroll.mp4  preview.aroll.srt   # same stem; aroll SRT only; ASS is program-pass
     └── stills / …
 ```
 

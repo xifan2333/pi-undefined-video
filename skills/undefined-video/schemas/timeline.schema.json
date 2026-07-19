@@ -138,7 +138,7 @@
           "type": "number",
           "minimum": 0,
           "maximum": 1,
-          "description": "Linear bed volume under A-roll dialog; default 0.22."
+          "description": "Linear bed volume under A-roll dialog; default 0.3."
         }
       },
       "description": "Optional BGM bed bound at timeline compile. generate video mixes under program audio. null when --bgm omitted."

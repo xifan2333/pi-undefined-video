@@ -39,7 +39,7 @@ export interface GenerateBgmParams {
   bitrate?: number;
   /** Final container after loudnorm: mp3 (default) | wav | aac. */
   format?: string;
-  /** Fixed bed loudness. Default -42. */
+  /** Fixed bed loudness. Default -36. */
   lufs?: number;
   /** True peak. Default -9. */
   tp?: number;
@@ -794,7 +794,7 @@ export async function generateBgm(p: GenerateBgmParams, ctx: Ctx): Promise<void>
     });
     if (format === "mp4") fail("generate bgm does not support mp4; use -f mp3|wav|aac");
 
-    const lufs = p.lufs ?? -42;
+    const lufs = p.lufs ?? -36;
     const tp = p.tp ?? -9;
     const lra = p.lra ?? 11;
 

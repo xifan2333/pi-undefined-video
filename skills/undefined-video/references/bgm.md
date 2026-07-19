@@ -155,7 +155,7 @@ TR: o2 l8 [ c c g g c c g g ] x8
   "format": "mp3",         // mp3 | wav | aac; also from output extension
   "sampleRate": 48000,     // 44100 or 48000
   "bitrate": 192,
-  "lufs": -42,
+  "lufs": -36,
   "tp": -9,
   "lra": 11
 }
@@ -167,7 +167,29 @@ TR: o2 l8 [ c c g g c c g g ] x8
 | `format` / output extension | mp3 | `mp3` / `wav` / `aac` |
 | `sampleRate` | 48000 | 44100 or 48000 |
 | `bitrate` | 192 | FamiStudio/final bitrate in kbps |
-| `lufs` / `tp` / `lra` | -42 / -9 / 11 | Bed loudness settings |
+| `lufs` / `tp` / `lra` | **-36** / -9 / 11 | Bed loudness (under −16 LUFS voice) |
+
+### Loudness stack (do not stack both knobs aggressively)
+
+Voice stays **−16 LUFS / −1.5 dBTP / 11 LRA**. BGM is quieter in two places:
+
+| Layer | Default | Notes |
+|---|---|---|
+| `uvid_generate_bgm` loudnorm | **−36 LUFS / −9 dBTP / 11 LRA** | Export bed level |
+| `timeline.bgm.volume` (program compile) | **0.3** | Linear mix under dialog (~−10.5 dB) |
+
+Target feel: bed present under speech, about **18–24 dB** quieter than voice in the mix — not a whisper.
+
+Tuning (prefer one knob first):
+
+| Intent | `lufs` | `timeline.bgm.volume` |
+|---|---|---|
+| Default (recommended) | −36 | 0.30 |
+| Still soft | −36 | 0.35 |
+| Stronger bed / sparse VO | −34 | 0.32–0.35 |
+| Music-forward | −32 | 0.35–0.40 |
+
+Avoid `lufs` warmer than ~−32 **and** `volume` ≥ 0.5 together — bed will ride up in VO gaps. Re-export `clips/bgm.mp3` after changing `lufs`; recompile `timeline.program.json` (or edit `bgm.volume`) then re-render video after changing mix volume.
 
 Pipeline:
 

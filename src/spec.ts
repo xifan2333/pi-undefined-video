@@ -441,7 +441,7 @@ export const commands: CommandSpec[] = [
       format: Type.Optional(
         Type.String({ description: "Output format: mp3 (default) | wav | aac; also from -o ext" }),
       ),
-      lufs: Type.Optional(Type.Number({ description: "Bed loudness LUFS; default -42" })),
+      lufs: Type.Optional(Type.Number({ description: "Bed loudness LUFS; default -36" })),
       tp: Type.Optional(Type.Number({ description: "True peak dBTP; default -9" })),
       lra: Type.Optional(Type.Number({ description: "Loudness range; default 11" })),
     }),

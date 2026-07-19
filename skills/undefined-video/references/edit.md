@@ -209,12 +209,17 @@ Timeline at **episode root** (media paths resolve from there):
 ```jsonc
 // uvid_generate_timeline
 { "input": "<EPISODE>/edit.json", "output": "<EPISODE>/timeline.aroll.json" }
-// uvid_generate_captions
-{ "input": "<EPISODE>/timeline.aroll.json", "output": "<EPISODE>/cache/preview.srt", "format": "srt" }
+// uvid_generate_captions — same basename as the video (mpv auto-loads sidecars)
+{ "input": "<EPISODE>/timeline.aroll.json", "output": "<EPISODE>/cache/preview.aroll.srt", "format": "srt" }
 // uvid_generate_video
 { "input": "<EPISODE>/timeline.aroll.json", "output": "<EPISODE>/cache/preview.aroll.mp4", "quality": "draft" }
-// then review externally: mpv --sub-file=cache/preview.srt cache/preview.aroll.mp4
+// then review: mpv cache/preview.aroll.mp4
+// (loads cache/preview.aroll.srt automatically; do not use a mismatched stem like preview.srt)
 ```
+
+**Sidecar naming:** external captions must share the video stem
+(`preview.aroll.mp4` ↔ `preview.aroll.srt`; `program.mp4` ↔ `program.srt` / `program.ass`).
+That is how mpv auto-loads without `--sub-file`.
 
 Aroll preview is **SRT only** (external sub for cut review). No ASS / no
 theme burn-in here — typewriter style + theme colors belong on the
@@ -243,5 +248,5 @@ only — **never** `uvid_generate_scene`.
 - [ ] CJK–Latin spaces live on word surfaces (program ASS karaoke will show them).
 - [ ] Audio: lead/trail/internal non-speech decided; long gaps held or dropped.
 - [ ] Video: every hold justified by picture info; static tails dropped.
-- [ ] `timeline.aroll.json` at root; preview mp4 + `cache/preview.srt` reviewed in mpv.
+- [ ] `timeline.aroll.json` at root; `cache/preview.aroll.mp4` + matching `cache/preview.aroll.srt` reviewed in mpv.
 - [ ] No unresolved `check`; aroll accepted → `status: video-reviewed`; then package per `program.md`. Set `status: ready` only after program (and cover if requested) human sign-off.

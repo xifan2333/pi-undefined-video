@@ -358,7 +358,7 @@ function buildA3Bgm(
   if (!bgm?.media || durationMs <= 0) return null;
   const bedMs = Math.max(1, Math.trunc(bgm.durationMs || durationMs));
   const loop = bgm.loop !== false;
-  const volume = bgm.volume != null && Number.isFinite(bgm.volume) ? Number(bgm.volume) : 0.22;
+  const volume = bgm.volume != null && Number.isFinite(bgm.volume) ? Number(bgm.volume) : 0.3;
   const startMs =
     bgm.startMs != null && Number.isFinite(bgm.startMs)
       ? Math.max(0, Math.min(durationMs, Math.trunc(bgm.startMs)))
@@ -518,7 +518,7 @@ export async function generateOtio(p: GenerateOtioParams, ctx: Ctx): Promise<voi
           uvid: {
             kind: "bgm",
             media: tl.bgm?.media ?? null,
-            volume: tl.bgm?.volume ?? 0.22,
+            volume: tl.bgm?.volume ?? 0.3,
             loop: tl.bgm?.loop !== false,
           },
         },
