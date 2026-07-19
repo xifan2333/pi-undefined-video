@@ -4,6 +4,11 @@
 and word-level `cache/NN.asr.json` for every source. No sparse edit actions,
 no program packaging.
 
+All tool `input`/`output` paths are **absolute under the episode root**
+(`<EPISODE>/…`). Examples below already use that form — substitute the real
+episode absolute path. Skill docs live under `SKILL_DIR`; never `read`
+`references/` from the episode.
+
 ## Resume / skip (decide before any generate)
 
 Inspect the episode first. For each prep product that already exists and
@@ -15,7 +20,7 @@ for the requested sources are present and valid:
 3. **Stop** — do not author `edit.json` actions, timeline, or program work.
 
 Only rebuild a product when its upstream input changed or accept failed.
-Do not center a prep reply on a full greenfield command list when the fixture
+Do not center a prep reply on a full greenfield tool list when the fixture
 is already prep-complete.
 
 ## Step 1 — Prepare fixed assets (packaging visuals)
@@ -23,31 +28,42 @@ is already prep-complete.
 **Done means:** every packaging visual exists under `clips/` as a valid media file.
 These are "fixed" — they depend on `script.md` only, not on any cut decision, so
 they can be built as soon as the script is final. Durations are owned by the
-templates / held later by `generate timeline`; this step only produces the assets.
+templates / held later by `uvid_generate_timeline`; this step only produces the assets.
 
 Scene projects go to `cache/scenes/` (disposable); rendered products go to `clips/`.
-Each asset is two commands: `generate scene` → a HyperFrames project dir, then
-`generate render` → the media. `--theme` comes from the script frontmatter.
+Each asset is two tools: `uvid_generate_scene` → a HyperFrames project dir, then
+`uvid_generate_render` → the media. `theme` comes from the script frontmatter.
 
 ### Do
 
 **intro / outro** — one per episode, fixed brand cards:
 
-```bash
-uvid generate scene  --type intro --theme onedark -o cache/scenes/intro
-uvid generate render -i cache/scenes/intro -o clips/intro.mp4
-uvid generate scene  --type outro --theme onedark -o cache/scenes/outro   # default avatar
-uvid generate render -i cache/scenes/outro -o clips/outro.mp4
+```jsonc
+// uvid_generate_scene
+{ "type": "intro", "theme": "onedark", "output": "<EPISODE>/cache/scenes/intro" }
+// uvid_generate_render
+{ "input": "<EPISODE>/cache/scenes/intro", "output": "<EPISODE>/clips/intro.mp4" }
+
+// uvid_generate_scene
+{ "type": "outro", "theme": "onedark", "output": "<EPISODE>/cache/scenes/outro" }
+// uvid_generate_render
+{ "input": "<EPISODE>/cache/scenes/outro", "output": "<EPISODE>/clips/outro.mp4" }
 ```
 
 **toc** — one clip per `##` chapter. Pass the full chapter list every time;
-`--current` (0-based) selects which row is highlighted:
+`current` (0-based) selects which row is highlighted:
 
-```bash
-CH='终端与 ls,ls 结合 grep,Cheat Sheet 补充'
-uvid generate scene  --type toc --theme onedark --chapters "$CH" --current 0 -o cache/scenes/toc1
-uvid generate render -i cache/scenes/toc1 -o clips/toc1.mp4
-# repeat --current 1 → toc2, --current 2 → toc3
+```jsonc
+// uvid_generate_scene  (repeat current 1 → toc2, current 2 → toc3)
+{
+  "type": "toc",
+  "theme": "onedark",
+  "chapters": "终端与 ls,ls 结合 grep,Cheat Sheet 补充",
+  "current": 0,
+  "output": "<EPISODE>/cache/scenes/toc1"
+}
+// uvid_generate_render
+{ "input": "<EPISODE>/cache/scenes/toc1", "output": "<EPISODE>/clips/toc1.mp4" }
 ```
 
 **markdown pictures** — one per `<audio>` source; this is that source's
@@ -55,33 +71,35 @@ uvid generate render -i cache/scenes/toc1 -o clips/toc1.mp4
 next `---`, excluding the block's leading `#`/`##` heading (headings are title /
 chapter, not picture). Render a **png still** (held to the audio's length later):
 
-```bash
-# write the sliced body to cache/md-body/NN.md, then:
-uvid generate scene  --type markdown --theme onedark -i cache/md-body/01.md -o cache/scenes/md-01
-uvid generate render -i cache/scenes/md-01 -o clips/01.visual.png -f png
+```jsonc
+// write the sliced body to cache/md-body/NN.md, then:
+// uvid_generate_scene
+{
+  "type": "markdown",
+  "theme": "onedark",
+  "input": "<EPISODE>/cache/md-body/01.md",
+  "output": "<EPISODE>/cache/scenes/md-01"
+}
+// uvid_generate_render
+{ "input": "<EPISODE>/cache/scenes/md-01", "output": "<EPISODE>/clips/01.visual.png", "format": "png" }
 ```
 
 **dialog** — one sprite set per episode (4 named RGBA stills for the talking-head chrome):
 
-```bash
-uvid generate scene  --type dialog --theme onedark -o cache/scenes/dialog
-uvid generate render -i cache/scenes/dialog -o clips/dialog -f sprite
-```
-
-pi-tool forms (params are camelCase; `-f` → `format`, sprite/png set via `format`):
-
 ```jsonc
 // uvid_generate_scene
-{ "type": "intro",    "theme": "onedark", "output": "cache/scenes/intro" }
-{ "type": "outro",    "theme": "onedark", "output": "cache/scenes/outro" }
-{ "type": "toc",      "theme": "onedark", "chapters": "a,b,c", "current": 0, "output": "cache/scenes/toc1" }
-{ "type": "markdown", "theme": "onedark", "input": "cache/md-body/01.md", "output": "cache/scenes/md-01" }
-{ "type": "dialog",   "theme": "onedark", "output": "cache/scenes/dialog" }
+{ "type": "dialog", "theme": "onedark", "output": "<EPISODE>/cache/scenes/dialog" }
 // uvid_generate_render
-{ "input": "cache/scenes/intro", "output": "clips/intro.mp4" }
-{ "input": "cache/scenes/md-01", "output": "clips/01.visual.png", "format": "png" }
-{ "input": "cache/scenes/dialog", "output": "clips/dialog", "format": "sprite" }
+{ "input": "<EPISODE>/cache/scenes/dialog", "output": "<EPISODE>/clips/dialog", "format": "sprite" }
 ```
+
+**freeform HyperFrames (motion or static frame) is not a prep step.** Do **not**
+author or render custom inserts here. Prep only builds **stock** packaging
+(intro/outro/toc/markdown stills/dialog) via `uvid_generate_scene`. Freeform later
+uses agent-written HTML + `uvid_generate_render` only — **never**
+`uvid_generate_scene`.
+
+After `video-reviewed`: `<SKILL_DIR>/references/freeform.md`.
 
 ### Accept
 
@@ -109,36 +127,27 @@ No `analyze` for images — use `ffprobe`:
    source id; the tag name (`audio`/`video`) selects the branch.
 2. The tag is an **editing declaration, not a probe** — a raw file may carry video
    even when tagged `<audio>`. Follow the tag, not the container:
-   - `<audio>` → `-f mp3`: keep normalized audio only, drop the picture (its picture
-     comes later from markdown / a still).
-   - `<video>` → `-f mp4`: keep the picture (video stream-copied), audio normalized.
+   - `<audio>` → `format` omit / mp3: keep normalized audio only, drop the picture
+     (its picture comes later from markdown / a still).
+   - `<video>` → `format: "mp4"`: keep the picture (video stream-copied), audio normalized.
 3. Target **−16 LUFS / −1.5 dBTP / 11 LRA** for every source (one target per episode).
 4. Write to `clips/NN.media.<ext>` — this is each source's `source.media`.
 
 One invocation per file; loop outside.
 
-```bash
-# CLI
-uvid generate normalize -i raw/01.mp4 -o clips/01.media.mp3        --lufs -16 --tp -1.5 --lra 11  # <audio>
-uvid generate normalize -i raw/02.mp4 -o clips/02.media.mp4 -f mp4 --lufs -16 --tp -1.5 --lra 11  # <video>
-```
 ```jsonc
-// pi tool: uvid_generate_normalize
-{ "input": "raw/01.mp4", "output": "clips/01.media.mp3",                     "lufs": -16, "tp": -1.5, "lra": 11 }  // <audio>
-{ "input": "raw/02.mp4", "output": "clips/02.media.mp4", "format": "mp4", "lufs": -16, "tp": -1.5, "lra": 11 }  // <video>
+// uvid_generate_normalize
+{ "input": "<EPISODE>/raw/01.mp4", "output": "<EPISODE>/clips/01.media.mp3", "lufs": -16, "tp": -1.5, "lra": 11 }  // <audio>
+{ "input": "<EPISODE>/raw/02.mp4", "output": "<EPISODE>/clips/02.media.mp4", "format": "mp4", "lufs": -16, "tp": -1.5, "lra": 11 }  // <video>
 ```
 
 ### Accept — verify loudness
 
-For each product, read the measurement from stdout (no file needed):
+For each product, read the measurement from the tool result (no file needed):
 
-```bash
-# CLI（reads stdout）
-uvid analyze loudness -i clips/NN.media.<ext>
-```
 ```jsonc
-// pi tool: uvid_analyze_loudness（no output → JSON in the tool result）
-{ "input": "clips/NN.media.<ext>" }
+// uvid_analyze_loudness  (no output → JSON in the tool result)
+{ "input": "<EPISODE>/clips/NN.media.<ext>" }
 ```
 
 Pass when **`|I − (−16)| ≤ 1.0`** and **`peak ≤ −1.5`**.
@@ -157,7 +166,7 @@ Pass when **`|I − (−16)| ≤ 1.0`** and **`peak ≤ −1.5`**.
 
 ## Step 3 — Transcribe each normalized segment (ASR)
 
-**Done means:** every source has `cache/NN.asr.json`, ready to feed `generate edit`.
+**Done means:** every source has `cache/NN.asr.json`, ready to feed `uvid_generate_edit`.
 
 Transcribe the **normalized** media from Step 2 (`clips/NN.media.*`), not `raw/` —
 clean audio transcribes more accurately and its timeline matches the media compile
@@ -166,35 +175,28 @@ extracted automatically.
 
 ### Do
 
-**In a pi session, prefer the built-in tool `transcribe_media`.**
-Use CLI `jianying-subtitle` (JianYing / CapCut free ASR) when working outside pi
-or when that binary is the installed ASR front-end. Both must write the same shape:
-`SubtitleSegment[]` with word-level timings to `cache/NN.asr.json`.
+**Prefer the built-in tool `transcribe_media`.**
+Write the same shape: `SubtitleSegment[]` with word-level timings to `cache/NN.asr.json`.
 
 Request `json` format — it carries word-level timestamps. The output is a
 `SubtitleSegment[]` (`[{ text, startMs, endMs, words:[{text,startMs,endMs}] }]`),
-which is exactly the ASR shape `generate edit` accepts (zero conversion).
+which is exactly the ASR shape `uvid_generate_edit` accepts (zero conversion).
 
 One invocation per file; loop outside. Write to `cache/NN.asr.json`.
 
 ```jsonc
-// pi tool: transcribe_media (preferred in-session)
-{ "input": "clips/01.media.mp3", "output": "cache/01.asr.json", "formats": ["json"] }
-{ "input": "clips/02.media.mp4", "output": "cache/02.asr.json", "formats": ["json"] }
-```
-```bash
-# CLI fallback (format inferred from the .json extension)
-jianying-subtitle clips/01.media.mp3 -o cache/01.asr.json
-jianying-subtitle clips/02.media.mp4 -o cache/02.asr.json
+// transcribe_media
+{ "input": "<EPISODE>/clips/01.media.mp3", "output": "<EPISODE>/cache/01.asr.json", "formats": ["json"] }
+{ "input": "<EPISODE>/clips/02.media.mp4", "output": "<EPISODE>/cache/02.asr.json", "formats": ["json"] }
 ```
 
 ### Accept
 
 - Each `cache/NN.asr.json` is a non-empty array of `{ text, startMs, endMs, words }`.
-- `generate edit -i cache/NN.asr.json …` ingests it without a shape error.
+- `uvid_generate_edit` with those paths ingests them without a shape error.
 
 ### Checklist
 
 - [ ] Every source has a `cache/NN.asr.json` (json format, word-level).
 - [ ] Transcribed the normalized `clips/NN.media.*`, not `raw/`.
-- [ ] Each file is a `SubtitleSegment[]` that `generate edit` accepts.
+- [ ] Each file is a `SubtitleSegment[]` that `uvid_generate_edit` accepts.

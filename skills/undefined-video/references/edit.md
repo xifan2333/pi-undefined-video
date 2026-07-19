@@ -7,7 +7,8 @@
 sparse **actions** that change something (drop a turn, fix its text, hold a gap,
 flag a doubt). This keeps the file small and the intent explicit.
 
-Machine-exact contract: `schemas/edit.schema.json`. Shape at a glance:
+Machine-exact contract: absolute `<SKILL_DIR>/schemas/edit.schema.json` (not under
+the episode). Shape at a glance:
 
 ```jsonc
 {
@@ -19,8 +20,8 @@ Machine-exact contract: `schemas/edit.schema.json`. Shape at a glance:
     {
       "id": "01",
       "type": "audio",                  // audio | video
-      "media": "clips/01.media.mp3",    // normalized media (Step 2)
-      "asr": "cache/01.asr.json",       // transcript source (Step 3)
+      "media": "clips/01.media.mp3",    // episode-relative in the file
+      "asr": "cache/01.asr.json",
       "visual": "clips/01.visual.png",  // audio sources only; omit for video
       "transcript": [ /* turns with stable ids, default keep */ ],
       "actions": [ /* sparse cut decisions — empty until you edit */ ]
@@ -32,41 +33,33 @@ Machine-exact contract: `schemas/edit.schema.json`. Shape at a glance:
 Turn/word ids are stable and assigned by the tool: `s<id>-t<NNN>` and
 `s<id>-t<NNN>-w<NNN>` (e.g. `s01-t000`, `s01-t000-w000`).
 
-## Build the skeleton — `generate edit`
+On-disk `edit.json` keeps **episode-relative** `media`/`asr`/`visual`. Tool `input`/`output` (and arrays passed to `uvid_generate_edit`) use **absolute** `<EPISODE>/…`.
+
+## Build the skeleton — `uvid_generate_edit`
 
 **Done means:** `edit.json` holds every source in script order, each with its
 `transcript` populated and `actions` empty, ready for editing.
 
-`generate edit` reads the ASR JSON(s), assigns stable ids, and upserts sources into
-`edit.json`. It **does not invent cuts** and **does not parse `script.md`** — you
-pass the mapping explicitly. Re-running preserves each source's existing `actions`
-and any sources you don't pass, so it is safe to re-run after adding media/ASR.
+`uvid_generate_edit` reads the ASR JSON(s), assigns stable ids, and upserts sources
+into `edit.json`. It **does not invent cuts** and **does not parse `script.md`** —
+you pass the mapping explicitly. Re-running preserves each source's existing
+`actions` and any sources you don't pass, so it is safe to re-run after adding
+media/ASR.
 
-The parallel arrays `-i / --id / --type / --media` (and optional `--visual`) must be
-equal length. `--type` and `--visual` follow the script tag: `<audio>` → `audio`
-with a `.visual.png` still; `<video>` → `video` with `-` (no still).
+The parallel arrays `input` / `id` / `type` / `media` (and optional `visual`) must
+be equal length. `type` and `visual` follow the script tag: `<audio>` → `audio`
+with a `.visual.png` still; `<video>` → `video` with `"-"` (no still).
 
-```bash
-# CLI
-uvid generate edit \
-  -i cache/01.asr.json,cache/02.asr.json,cache/03.asr.json,cache/04.asr.json,cache/05.asr.json \
-  -o edit.json \
-  --id 01,02,03,04,05 \
-  --type audio,video,video,audio,audio \
-  --media clips/01.media.mp3,clips/02.media.mp4,clips/03.media.mp4,clips/04.media.mp3,clips/05.media.mp3 \
-  --visual clips/01.visual.png,-,-,clips/04.visual.png,clips/05.visual.png \
-  --script script.md
-```
 ```jsonc
-// pi tool: uvid_generate_edit  (arrays, equal length; visual "-" = none)
+// uvid_generate_edit  (arrays, equal length; visual "-" = none)
 {
-  "input":  ["cache/01.asr.json", "cache/02.asr.json", "cache/03.asr.json", "cache/04.asr.json", "cache/05.asr.json"],
-  "output": "edit.json",
+  "input":  ["<EPISODE>/cache/01.asr.json", "<EPISODE>/cache/02.asr.json", "<EPISODE>/cache/03.asr.json", "<EPISODE>/cache/04.asr.json", "<EPISODE>/cache/05.asr.json"],
+  "output": "<EPISODE>/edit.json",
   "id":     ["01", "02", "03", "04", "05"],
   "type":   ["audio", "video", "video", "audio", "audio"],
-  "media":  ["clips/01.media.mp3", "clips/02.media.mp4", "clips/03.media.mp4", "clips/04.media.mp3", "clips/05.media.mp3"],
-  "visual": ["clips/01.visual.png", "-", "-", "clips/04.visual.png", "clips/05.visual.png"],
-  "script": "script.md"
+  "media":  ["<EPISODE>/clips/01.media.mp3", "<EPISODE>/clips/02.media.mp4", "<EPISODE>/clips/03.media.mp4", "<EPISODE>/clips/04.media.mp3", "<EPISODE>/clips/05.media.mp3"],
+  "visual": ["<EPISODE>/clips/01.visual.png", "-", "-", "<EPISODE>/clips/04.visual.png", "<EPISODE>/clips/05.visual.png"],
+  "script": "<EPISODE>/script.md"
 }
 ```
 
@@ -98,7 +91,7 @@ Sparse only: default is keep. Each action:
 | `kind` | open string; prefer `filler` `repetition` `false_start` `mistake` `asr_error` `pause` `visual_action` |
 | `reason` / `evidence` | human note + optional freeform pointers |
 
-### Compile model (`generate timeline`)
+### Compile model (`uvid_generate_timeline`)
 
 ```
 audio_kept = invert(audio drops − keeps)
@@ -133,7 +126,7 @@ Chinese–English boundary always has a space: `命令 ls`, `GNU/Linux 社区`.
 Status advances as you finish each pass:
 `subtitle-draft` → `audio-reviewed` → `video-reviewed` → `ready`.
 
-`ready` is reserved for post-program human sign-off (`references/program.md`).
+`ready` is reserved for post-program human sign-off (`<SKILL_DIR>/references/program.md`).
 Finishing the visual pass and accepting aroll → `video-reviewed`, not `ready`.
 
 **Partial-pass discipline:** a subtitle-only request authors only `stage: "subtitle"`
@@ -156,16 +149,14 @@ Do **not** invent silence cuts here — only speech units.
 
 ### 2. Audio re-verify (`stage: "audio"`)
 
-Evidence (stdout by default):
+Evidence — write waveform to cache, then silence (no shell pipe):
 
-```bash
-# CLI — pipe waveform → silence (≥400ms typical)
-uvid analyze waveform -i clips/02.media.mp4 | uvid analyze silence --min-ms 400
-```
 ```jsonc
-// pi: uvid_analyze_waveform then uvid_analyze_silence
-{ "input": "clips/02.media.mp4" }
-{ "input": "<waveform.json>", "minMs": 400 }
+// uvid_analyze_waveform
+{ "input": "<EPISODE>/clips/02.media.mp4", "output": "<EPISODE>/cache/02.waveform.json" }
+// uvid_analyze_silence  (≥400ms typical)
+{ "input": "<EPISODE>/cache/02.waveform.json", "minMs": 400 }
+// omit silence output → ranges JSON in the tool result
 ```
 
 Use silence to:
@@ -189,28 +180,22 @@ Trail silence after the last kept turn is already excluded by the kept-turn mode
 | info | none | drop audio, keep picture (`hold_until`) |
 | none | info | keep sound; **supplement picture** (usually a `script.md` design gap) |
 
-For each held long gap: sample stills (and optional `frame-diff`) and decide.
+For each held long gap: sample stills (and optional frame-diff) and decide.
 
-```bash
-uvid analyze frame-diff -i clips/02.media.mp4 --from-ms 21650 --to-ms 31936
-# stills at candidate times:
-uvid generate frame -i clips/02.media.mp4 --at-ms 21800 -o cache/stills/02_21800.jpg
-```
 ```jsonc
-// pi: uvid_analyze_frame_diff / uvid_generate_frame
-{ "input": "clips/02.media.mp4", "fromMs": 21650, "toMs": 31936 }
-{ "input": "clips/02.media.mp4", "atMs": 21800, "output": "cache/stills/02_21800.jpg" }
+// uvid_analyze_frame-diff
+{ "input": "<EPISODE>/clips/02.media.mp4", "fromMs": 21650, "toMs": 31936 }
+// uvid_generate_frame
+{ "input": "<EPISODE>/clips/02.media.mp4", "atMs": 21800, "output": "<EPISODE>/cache/stills/02_21800.jpg" }
 ```
 
 Optional: contact-sheet many stills before deciding holds:
 
-```bash
-uvid generate sheet cache/stills/02_*.jpg -o cache/stills/02.sheet.jpg --tile 4x2
-```
 ```jsonc
-// pi: uvid_generate_sheet
-{ "paths": ["cache/stills/02_21800.jpg"], "output": "cache/stills/02.sheet.jpg", "tile": "4x2" }
+// uvid_generate_sheet
+{ "paths": ["<EPISODE>/cache/stills/02_21800.jpg"], "output": "<EPISODE>/cache/stills/02.sheet.jpg", "tile": "4x2" }
 ```
+
 Not required; use when stills are numerous.
 
 Resolve provisional holds: shorten `untilMs` to the last informative frame, then
@@ -221,29 +206,36 @@ Do **not** add `keep` actions to mark “picture is good”.
 
 Timeline at **episode root** (media paths resolve from there):
 
-```bash
-uvid generate timeline -i edit.json -o timeline.aroll.json
-uvid generate captions -i timeline.aroll.json -o cache/preview.srt -f srt
-uvid generate video -i timeline.aroll.json -o cache/preview.aroll.mp4 --quality draft
-mpv --sub-file=cache/preview.srt cache/preview.aroll.mp4
-```
 ```jsonc
-// pi tools
-{ "input": "edit.json", "output": "timeline.aroll.json" }             // uvid_generate_timeline
-{ "input": "timeline.aroll.json", "output": "cache/preview.srt", "format": "srt" }
-{ "input": "timeline.aroll.json", "output": "cache/preview.aroll.mp4", "quality": "draft" }
+// uvid_generate_timeline
+{ "input": "<EPISODE>/edit.json", "output": "<EPISODE>/timeline.aroll.json" }
+// uvid_generate_captions
+{ "input": "<EPISODE>/timeline.aroll.json", "output": "<EPISODE>/cache/preview.srt", "format": "srt" }
+// uvid_generate_video
+{ "input": "<EPISODE>/timeline.aroll.json", "output": "<EPISODE>/cache/preview.aroll.mp4", "quality": "draft" }
+// then review externally: mpv --sub-file=cache/preview.srt cache/preview.aroll.mp4
 ```
 
 Aroll preview is **SRT only** (external sub for cut review). No ASS / no
-`--fg/--bg` theme burn-in here — typewriter style + theme colors belong on the
-program pass (`references/program.md` → `program.ass` + burn-in).
+theme burn-in here — typewriter style + theme colors belong on the
+program pass (`<SKILL_DIR>/references/program.md` → `program.ass` + burn-in).
 
 Accept: captions clean (spaces on SRT, no fillers), cuts on pauses,
 V-only holds only where the screen still informs, duration matches intent.
 Fix by editing `actions` and regenerating — never hand-patch the mp4.
 
 Aroll is the body-cut review path. Packaging → final deliverable is
-`references/program.md` (`timeline.program.json` + `program.mp4`).
+`<SKILL_DIR>/references/program.md` (`timeline.program.json` + `program.mp4`).
+
+**Do not freeform-render yet.** Custom HyperFrames inserts wait until aroll is
+accepted (`status: video-reviewed`). Cut still moves duration, chapters, and
+picture; early freeform wastes renders or locks stale art. Stock prep
+intro/outro/toc/markdown/dialog are fine early.
+
+**After `video-reviewed`:** freeform motion (`.mp4` packaging) or static frame
+(`.png` as `source.visual`) → `<SKILL_DIR>/references/freeform.md`. Prefer stock
+markdown visual when enough. Freeform = agent `write` + `uvid_generate_render`
+only — **never** `uvid_generate_scene`.
 
 ### Checklist
 
@@ -253,4 +245,3 @@ Aroll is the body-cut review path. Packaging → final deliverable is
 - [ ] Video: every hold justified by picture info; static tails dropped.
 - [ ] `timeline.aroll.json` at root; preview mp4 + `cache/preview.srt` reviewed in mpv.
 - [ ] No unresolved `check`; aroll accepted → `status: video-reviewed`; then package per `program.md`. Set `status: ready` only after program (and cover if requested) human sign-off.
-

@@ -4,6 +4,8 @@
 
 **Done means:** `script.md` follows this contract, and referenced media exists under `raw/NN.ext`.
 
+In `script.md`, media tags stay episode-relative (`raw/NN.ext`). Tool `input`/`output` elsewhere use absolute `<EPISODE>/…`. Stage docs: absolute `<SKILL_DIR>/references/…`.
+
 ## Contract
 
 ### Frontmatter
@@ -76,4 +78,4 @@ Talking points...
 - [ ] Every media tag points to `raw/NN.ext`.
 - [ ] The TOC formed by `##` headings matches the intended episode structure.
 
-→ Prep: `references/prep.md`
+→ Prep: `<SKILL_DIR>/references/prep.md`

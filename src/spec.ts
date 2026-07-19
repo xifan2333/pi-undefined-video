@@ -453,7 +453,9 @@ export const commands: CommandSpec[] = [
     summary: "one HyperFrames scene project dir (intro|outro|toc|markdown|dialog)",
     description:
       "Generate: package templates → one renderable HyperFrames scene directory. " +
-      "Types: intro, outro, toc, markdown, dialog. " +
+      "Types: intro, outro, toc, markdown, dialog (stock packaging only). " +
+      "Freeform AI HyperFrames: write index.html yourself under a scene dir, then " +
+      "`uvid generate render` — do not use generate scene. " +
       "Main product is a directory (-o required); stdout prints that absolute path. " +
       "Multiple scenes = multiple invocations (shell loop), not one multi-dir command. " +
       "TOC short form: `uvid generate scene --type toc --theme onedark --chapters 'a,b,c' --current 1 -o scenes/toc-ch2`. " +

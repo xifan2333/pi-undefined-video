@@ -5,18 +5,20 @@ description: >
   → sparse edit.json → aroll/program timeline → program.mp4 + Bilibili cover.png.
   Use whenever the user mentions uvid, pi-undefined-video, 做一期视频/口播成片,
   edit.json, sparse cuts, timeline.aroll/program, program.mp4, bgm.mml, B 站封面,
-  or the full episode pipeline (raw clips → packaged deliverable). Also use for
-  partial steps inside that pipeline (only ASR, only subtitle pass, only packaging,
-  only cover). Do NOT use for freeform HTML/motion compositions (HyperFrames
-  workflows), product-launch promos, PR explainers, or plain subtitle burn-in on
-  an already-finished video without the uvid episode layout.
+  the full episode pipeline (raw clips → packaged deliverable), or partial steps
+  (ASR, subtitle pass, packaging, cover). Also use for freeform packaging inserts
+  inside a uvid episode after aroll is accepted (custom motion mp4 or static-frame
+  png as source.visual): agent-authored HyperFrames scene dirs + uvid_generate_render
+  only — never uvid_generate_scene for freeform. Do NOT use for whole freeform
+  HyperFrames videos with no uvid episode layout, product-launch promos, PR
+  explainers, or plain subtitle burn-in on a finished mp4 without uvid layout.
 license: MIT
 compatibility: >
-  Node >=20; uvid from this package; ffmpeg/ffprobe; mpv for review; ASR via
-  pi tool transcribe_media (preferred in-session) or jianying-subtitle CLI;
-  HyperFrames only as the backend of uvid generate scene/render; FamiStudio for
-  generate bgm; ImageMagick magick for cover crop / optional generate sheet;
-  codex_generate_image (openai-codex login) for cover art.
+  Node >=20; uvid tools from this package; ffmpeg/ffprobe; mpv for review; ASR via
+  pi tool transcribe_media; HyperFrames only as the backend of uvid_generate_scene /
+  uvid_generate_render; FamiStudio for uvid_generate_bgm; ImageMagick magick for
+  cover crop / optional uvid_generate_sheet; codex_generate_image (openai-codex
+  login) for cover art.
 metadata:
   tags: uvid, episode, bilibili, edit-json, timeline, cover
 ---
@@ -27,22 +29,59 @@ Produce one **episode directory** with uvid: three authored files
 (`script.md`, `edit.json`, `bgm.mml`) plus mechanical filters that land
 `program.mp4` / captions / optional `program.otio` / `cover.png`.
 
+## Path rules (read first)
+
+**Prefer absolute paths everywhere.** Relative paths are the main source of agent
+mistakes (skill dir vs episode cwd).
+
+Two roots — do not mix them.
+
+| Kind | Root | How to open / pass |
+|---|---|---|
+| **Skill docs / contracts** | directory that contains this `SKILL.md` | `read` / open with **absolute** paths: `<SKILL_DIR>/references/…`, `<SKILL_DIR>/schemas/…`, `<SKILL_DIR>/assets/themes.css` |
+| **Episode work products** | episode project root (`process.cwd()` for `uvid_*`) | tool `input`/`output` with **absolute** paths under the episode: `<EPISODE>/clips/…`, `<EPISODE>/cache/…`, `<EPISODE>/edit.json`, … |
+
+### Skill docs
+
+1. Resolve `SKILL_DIR` = absolute parent of this file (the path you used to load
+   `SKILL.md`, or the skill’s installed path under the package).
+2. Stage docs are only under that root. Examples (literal pattern, not cwd-relative):
+   - `<SKILL_DIR>/references/prep.md`
+   - `<SKILL_DIR>/references/edit.md`
+   - `<SKILL_DIR>/schemas/edit.schema.json`
+   - `<SKILL_DIR>/assets/themes.css`
+3. **Never** `read` `references/…` or `schemas/…` as a path relative to the episode.
+
+### Episode media / tool I/O
+
+1. Resolve `EPISODE` = absolute episode directory (user project / episode root).
+2. When calling `uvid_*` / `transcribe_media` / `codex_generate_image`, pass
+   **absolute** paths under `EPISODE` for every `input` / `output` / media field.
+3. Runtime still resolves relatives against `process.cwd()`, but agents must not
+   rely on that — always expand to absolute before the tool call.
+4. Package templates (`templates/`) are internal to the package (`packageRoot()`);
+   do not invent skill-dir or episode paths for them.
+
+Tool examples use **absolute** `input`/`output` (and media fields) as
+`<EPISODE>/…`. Do not pass cwd-relative paths for tool I/O.
+
 ## When to load which reference
 
 Read only the stage you need. Do not restart the whole pipeline if later
 artifacts already exist and match the contracts.
 
-| User intent | Read first | Then |
+| User intent | Read first (absolute under `SKILL_DIR`) | Then |
 |---|---|---|
-| New episode / full pipeline | this file → [script](references/script.md) | prep → edit → bgm → program → cover |
-| Write or fix `script.md` only | [script](references/script.md) | stop unless they ask prep |
-| Assets / normalize / ASR | [prep](references/prep.md) | |
-| Build or revise cuts / subtitles / aroll | [edit](references/edit.md) + [edit schema](schemas/edit.schema.json) when validating shape | |
-| Visual stills contact sheet (optional) | [edit](references/edit.md) (visual pass) | `uvid generate sheet` on stills |
-| Compose / export BGM | [bgm](references/bgm.md) | export to **`clips/bgm.mp3`** |
-| Package final `program.mp4` | [program](references/program.md) | |
-| B 站封面 | [cover](references/cover.md) + palette from [themes](assets/themes.css) | ask style+content if missing |
-| Theme colors / fonts | [themes](assets/themes.css) | hex only in image prompts; do not invent a second palette |
+| New episode / full pipeline | this file → `<SKILL_DIR>/references/script.md` | prep → edit → bgm → program → cover |
+| Write or fix `script.md` only | `<SKILL_DIR>/references/script.md` | stop unless they ask prep |
+| Assets / normalize / ASR | `<SKILL_DIR>/references/prep.md` | |
+| Freeform HyperFrames insert (no `generate scene`) | `<SKILL_DIR>/references/freeform.md` | only when `video-reviewed`; **motion** `.mp4` (packaging) or **static frame** `.png` (`source.visual`); never during prep/edit cut |
+| Build or revise cuts / subtitles / aroll | `<SKILL_DIR>/references/edit.md` + `<SKILL_DIR>/schemas/edit.schema.json` when validating shape | |
+| Visual stills contact sheet (optional) | `<SKILL_DIR>/references/edit.md` (visual pass) | `uvid_generate_sheet` on stills |
+| Compose / export BGM | `<SKILL_DIR>/references/bgm.md` | export to **`<EPISODE>/clips/bgm.mp3`** |
+| Package final `program.mp4` | `<SKILL_DIR>/references/program.md` | |
+| B 站封面 | `<SKILL_DIR>/references/cover.md` + `<SKILL_DIR>/assets/themes.css` | ask style+content if missing |
+| Theme colors / fonts | `<SKILL_DIR>/assets/themes.css` | hex only in image prompts; do not invent a second palette |
 
 **Resume rule (primary decision, not a footnote):**
 
@@ -59,30 +98,43 @@ artifacts already exist and match the contracts.
 4. **Report, then stop** when the asked stage is already satisfied. Do not
    center the reply on a full greenfield command list for work that is done.
 
-**Not this skill:** freeform HyperFrames authoring, product launch reels,
-PR videos, or “just burn SRT onto an mp4” with no uvid episode layout.
+**Not this skill:** whole freeform HyperFrames videos outside a uvid episode
+layout; product launch reels; PR explainers; or “just burn SRT onto an mp4” with
+no uvid episode layout. Freeform **inserts** after `video-reviewed` (motion mp4
+or static-frame png) **are** in scope — see
+`<SKILL_DIR>/references/freeform.md`.
 
-## Invocation
+## Invocation (pi tools only)
 
-Every command has two equivalent forms over the same spec (flags never drift):
+In-session, drive every mechanical step with **pi tools**. Do not shell out to
+`uvid …` CLI from this skill.
 
-- **CLI:** `uvid <family> <action> -i … -o …` — kebab flags (`--from-ms`, `--sample-rate`)
-- **pi tool:** `uvid_<family>_<action>` with a params object — camelCase (`fromMs`, `sampleRate`)
-
-`-i`/`-o` ⇄ `input`/`output`. Binary `generate` needs `output`. `analyze` with no
-`output` returns JSON in the tool result (same bytes CLI prints to stdout).
-
-Concrete dual-form examples live in the stage references (prep / edit / program),
-not here.
-
-### In-session tool preferences
-
-| Need | Prefer in pi | CLI fallback |
+| Need | Tool | Notes |
 |---|---|---|
-| ASR | `transcribe_media` → `cache/NN.asr.json` (`formats: ["json"]`) | `jianying-subtitle` |
-| Cover image | `codex_generate_image` | (same tool; no local CLI) |
-| Loudness / silence / frame evidence | `uvid_analyze_*` with no `output` | pipe stdout |
-| Contact sheet of stills | `uvid_generate_sheet` | `uvid generate sheet` |
+| Stock scene project | `uvid_generate_scene` | intro/outro/toc/markdown/dialog only → `cache/scenes/` |
+| Freeform scene HTML | agent `write` | HyperFrames dir under `cache/scenes/`; **no** `uvid_generate_scene` |
+| Render scene | `uvid_generate_render` | stock or freeform; omit/mp4 = motion (length ← HTML `data-duration` → probed file on timeline); `png` = static frame (`atMs`, held by speech); `sprite` = dialog |
+| Loudness normalize | `uvid_generate_normalize` | requires `lufs` / `tp` / `lra` |
+| Loudness / waveform / silence / frame-diff | `uvid_analyze_*` | omit `output` → JSON in tool result |
+| Still frame | `uvid_generate_frame` | requires `atMs` |
+| Contact sheet | `uvid_generate_sheet` | |
+| Skeleton `edit.json` | `uvid_generate_edit` | parallel arrays equal length |
+| Timeline | `uvid_generate_timeline` | packaging flags → `basis=program` |
+| Captions | `uvid_generate_captions` | `format`: `srt` \| `ass` |
+| Final / preview video | `uvid_generate_video` | |
+| OTIO | `uvid_generate_otio` | optional |
+| BGM bed | `uvid_generate_bgm` | write **`clips/bgm.mp3`** |
+| ASR | `transcribe_media` | `formats: ["json"]` → `cache/NN.asr.json` |
+| Cover art | `codex_generate_image` | then crop to `cover.png` |
+
+Params are **camelCase** (`fromMs`, `sampleRate`, `tocBefore`). Path fields are
+`input` / `output` (same role as CLI `-i`/`-o`) — always **absolute** under
+`EPISODE`. Same for `media` / `visual` / packaging paths (`intro`, `outro`,
+`toc`, `bgm`, `dialog`). Binary `generate` needs `output`. `analyze` with no
+`output` returns JSON in the tool result.
+
+Concrete call shapes live under `<SKILL_DIR>/references/` (prep / edit / program /
+bgm / cover). Substitute the real episode root for `<EPISODE>`.
 
 ## Dependencies (fail fast)
 
@@ -91,12 +143,12 @@ user; do not invent a substitute pipeline.
 
 | Stage | Requires |
 |---|---|
-| All | `uvid` (this package), Node ≥20 |
+| All | this package’s `uvid_*` tools, Node ≥20 |
 | Prep accept | `ffprobe` |
-| Prep ASR | `transcribe_media` or `jianying-subtitle` |
-| Prep scenes | HyperFrames available to `uvid generate scene/render` |
+| Prep ASR | `transcribe_media` |
+| Prep scenes | HyperFrames available to `uvid_generate_scene` / `uvid_generate_render` |
 | Review | `mpv` |
-| BGM export | FamiStudio (via `uvid generate bgm`) |
+| BGM export | FamiStudio (via `uvid_generate_bgm`) |
 | Cover crop / sheet | ImageMagick `magick` |
 | Cover art | `codex_generate_image` + openai-codex login |
 
@@ -132,8 +184,8 @@ existing monorepo gitignore unless the user wants that.
 
 ## What lands on disk
 
-Only files a later command reads with `-i` (or render-time external media) need
-to land. One-shot decision evidence stays on stdout / tool result.
+Only files a later tool reads as `input` (or render-time external media) need
+to land. One-shot decision evidence stays in the tool result.
 
 | Kind | Examples | On disk? |
 |---|---|---|
@@ -164,17 +216,18 @@ Rules:
 
 ## Pipeline map
 
-| Stage | Doc |
+| Stage | Doc (absolute under `SKILL_DIR`) |
 |---|---|
-| Script contract | [references/script.md](references/script.md) |
-| Prep: packaging assets → normalize → ASR | [references/prep.md](references/prep.md) |
-| Edit skeleton + sparse actions + aroll | [references/edit.md](references/edit.md) |
-| BGM composition | [references/bgm.md](references/bgm.md) |
-| Packaging → `program.mp4` | [references/program.md](references/program.md) |
-| Cover (B 站 + theme; style/content from human) | [references/cover.md](references/cover.md) |
-| Theme tokens | [assets/themes.css](assets/themes.css) |
-| Machine contracts | [schemas/edit.schema.json](schemas/edit.schema.json), [schemas/timeline.schema.json](schemas/timeline.schema.json) |
+| Script contract | `<SKILL_DIR>/references/script.md` |
+| Prep: packaging assets → normalize → ASR | `<SKILL_DIR>/references/prep.md` |
+| Edit skeleton + sparse actions + aroll | `<SKILL_DIR>/references/edit.md` |
+| BGM composition | `<SKILL_DIR>/references/bgm.md` |
+| Packaging → `program.mp4` | `<SKILL_DIR>/references/program.md` |
+| Freeform motion / static inserts | `<SKILL_DIR>/references/freeform.md` |
+| Cover (B 站 + theme; style/content from human) | `<SKILL_DIR>/references/cover.md` |
+| Theme tokens | `<SKILL_DIR>/assets/themes.css` |
+| Machine contracts | `<SKILL_DIR>/schemas/edit.schema.json`, `<SKILL_DIR>/schemas/timeline.schema.json` |
 
 Load schema files when validating or writing machine JSON — not on every turn.
-For theme hex, prefer the table in `cover.md` or the matching `[data-theme]` block;
+For theme hex, prefer the table in cover.md or the matching `[data-theme]` block;
 avoid dumping the entire CSS into context.

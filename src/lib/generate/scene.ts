@@ -5,7 +5,10 @@
  *   templates/<type>/{index.html, assets/...}
  * Shared theme: templates/_shared/themes.css
  *
- * generate scene = copy template folder → patch vars → emit scene dir.
+ * generate scene = copy package template → patch vars → emit scene dir.
+ * Stock types only: intro | outro | toc | markdown | dialog.
+ * Freeform AI HTML is NOT a scene type — author a HyperFrames project dir
+ * and call `uvid generate render` on it directly.
  * Independent of edit.json. Multi-scene = multiple invocations.
  */
 import fs from "node:fs";
@@ -42,7 +45,7 @@ export interface GenerateSceneParams {
   watermark?: string;
   /** Composition id; toc defaults to basename(-o). */
   id?: string;
-  /** Seconds for type=markdown only (default 4). TOC/intro/outro duration is owned by the template. */
+  /** Seconds for type=markdown only (default 4). TOC/intro/outro length is owned by the template. */
   duration?: number;
   /** Comma-separated chapter titles for type=toc (primary). */
   chapters?: string;
@@ -328,7 +331,11 @@ export async function generateScene(p: GenerateSceneParams, ctx: Ctx): Promise<v
   } else if (type === "toc") {
     createTocScene(outDir, p, ctx);
   } else {
-    fail(`unsupported scene type: ${p.type || "(empty)"} (intro|outro|toc|markdown|dialog)`);
+    fail(
+      `unsupported scene type: ${p.type || "(empty)"} (intro|outro|toc|markdown|dialog). ` +
+        `Freeform HyperFrames HTML: write a scene dir with index.html and run ` +
+        `uvid generate render -i that-dir (no generate scene).`,
+    );
   }
 
   if (!fs.existsSync(path.join(outDir, "index.html"))) {

@@ -3,16 +3,20 @@
 **This is one of the three AI/human-authored creative files.** The other two are `script.md` and `edit.json`.
 
 You write root `bgm.mml`; the tool exports the bed to **`clips/bgm.mp3`**
-(matches episode layout and `program.md` `--bgm`). Do not leave the only export
-at episode-root `bgm.mp3`.
+(matches episode layout and `<SKILL_DIR>/references/program.md` `bgm` param). Do not
+leave the only export at episode-root `bgm.mp3`.
 
-```bash
-uvid generate bgm -i bgm.mml -o clips/bgm.mp3 [--duration SEC]
+```jsonc
+// uvid_generate_bgm
+{ "input": "<EPISODE>/bgm.mml", "output": "<EPISODE>/clips/bgm.mp3", "duration": 62 }
 ```
 
-`--duration` is computed by the caller when the BGM bed must cover a known window. If omitted, the tool exports the MML loop's own length.
+`duration` is computed by the caller when the BGM bed must cover a known window.
+If omitted, the tool exports the MML loop's own length.
 
 **Done means:** `bgm.mml` has a valid shape, and `clips/bgm.mp3` duration is at least the required BGM window.
+
+Tool `input`/`output` use **absolute** `<EPISODE>/…` (examples below).
 
 ---
 
@@ -29,7 +33,7 @@ bgmSec   ≈ voiceSec + tocSec          # NOT full program; exclude intro/outro
 bars     ≈ bgmSec × tempo / 60 / 4
 ```
 
-`generate timeline --bgm` writes `timeline.bgm.startMs/endMs` from packaging geometry. `generate video` / `generate otio` honor that window.
+`uvid_generate_timeline` with `bgm` writes `timeline.bgm.startMs/endMs` from packaging geometry. `uvid_generate_video` / `uvid_generate_otio` honor that window.
 
 ### 2) Energy map → loop length → notes
 
@@ -39,7 +43,7 @@ bars     ≈ bgmSec × tempo / 60 / 4
 | 45–90s | 16 bars | A A B A |
 | 90–180s | 16–32 bars | A A B A / A B A C |
 
-Use `progression` as the loop structure and export with `--duration <bgmSec>` to cover the BGM window (intro end → outro start). Prefer too long over too short.
+Use `progression` as the loop structure and export with `duration: <bgmSec>` to cover the BGM window (intro end → outro start). Prefer too long over too short.
 
 Practical guidance:
 
@@ -54,7 +58,7 @@ Practical guidance:
 (optional) kept audio duration + script chapter order
   → bgmSec / bars / energy map / loop length
   → write bgm.mml
-  → uvid generate bgm -i bgm.mml -o clips/bgm.mp3 --duration <bgmSec>
+  → uvid_generate_bgm { input: <EPISODE>/bgm.mml, output: <EPISODE>/clips/bgm.mp3, duration: <bgmSec> }
 ```
 
 ---
@@ -142,22 +146,28 @@ TR: o2 l8 [ c c g g c c g g ] x8
 
 ## Export
 
-```bash
-uvid generate bgm -i bgm.mml -o clips/bgm.mp3 --duration <bgmSec>
-# optional:
-#   -f wav|aac
-#   --sample-rate 48000
-#   --bitrate 192
-#   --lufs -42 --tp -9 --lra 11
+```jsonc
+// uvid_generate_bgm
+{
+  "input": "<EPISODE>/bgm.mml",
+  "output": "<EPISODE>/clips/bgm.mp3",
+  "duration": 62,          // optional; full song if omitted
+  "format": "mp3",         // mp3 | wav | aac; also from output extension
+  "sampleRate": 48000,     // 44100 or 48000
+  "bitrate": 192,
+  "lufs": -42,
+  "tp": -9,
+  "lra": 11
+}
 ```
 
-| Parameter | Default | Meaning |
+| Param | Default | Meaning |
 |---|---|---|
-| `--duration` | Full song | Export duration in seconds when the bed must cover a known BGM window |
-| `-f` / `-o` extension | mp3 | `mp3` / `wav` / `aac` |
-| `--sample-rate` | 48000 | 44100 or 48000 |
-| `--bitrate` | 192 | FamiStudio/final bitrate in kbps |
-| `--lufs` / `--tp` / `--lra` | -42 / -9 / 11 | Bed loudness settings |
+| `duration` | Full song | Export duration in seconds when the bed must cover a known BGM window |
+| `format` / output extension | mp3 | `mp3` / `wav` / `aac` |
+| `sampleRate` | 48000 | 44100 or 48000 |
+| `bitrate` | 192 | FamiStudio/final bitrate in kbps |
+| `lufs` / `tp` / `lra` | -42 / -9 / 11 | Bed loudness settings |
 
 Pipeline:
 
@@ -180,4 +190,4 @@ accompaniment: style=… s2mode=… bass=…
 - [ ] If `edit.json` exists, estimate `bgmSec` from kept aroll + TOC duration (intro end → outro start), not raw media / full program.
 - [ ] Work structure-first: bgmSec, energy map, loop length/form, then MML.
 - [ ] `bgm.mml` contains `title`, `tempo`, and either `progression`+S1 or fully handwritten S1+TR.
-- [ ] `uvid generate bgm` writes `clips/bgm.mp3` with duration ≥ the required BGM window (intro end → outro start).
+- [ ] `uvid_generate_bgm` writes `clips/bgm.mp3` with duration ≥ the required BGM window (intro end → outro start).
